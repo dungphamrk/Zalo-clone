@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
@@ -24,7 +25,8 @@ const wallPosts = [
 
 export default function WallScreen() {
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
       {/* Header xanh và chuông vector, anim bounceIn */}
       <Animatable.View animation="bounceInDown" duration={650} style={styles.headerBox}>
         <Text style={styles.headerTitle}>Tường nhà</Text>
@@ -69,11 +71,13 @@ export default function WallScreen() {
           </Animatable.View>
         ))}
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#028fe7' },
   container: { flex: 1, backgroundColor: '#f8fafd' },
   headerBox: {
     flexDirection: 'row', alignItems: 'center', height: 60, backgroundColor: '#028fe7',

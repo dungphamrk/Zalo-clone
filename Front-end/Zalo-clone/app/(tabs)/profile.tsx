@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons, Ionicons, AntDesign, SimpleLineIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
@@ -15,8 +16,9 @@ const menuData = [
 
 export default function ProfileScreen() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8fafd' }}>
-      {/* Header màu xanh với icon vector, bounce */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#028fe7' }} edges={['top', 'left', 'right']}>
+      <View style={{ flex: 1, backgroundColor: '#f8fafd' }}>
+        {/* Header màu xanh với icon vector, bounce */}
       <Animatable.View animation="bounceInDown" duration={650} style={styles.headerBox}>
         <Text style={styles.headerTitle}>Cá nhân</Text>
         <Animatable.View animation="bounceIn" delay={190} style={styles.headerIconBox}>
@@ -50,7 +52,8 @@ export default function ProfileScreen() {
           </Animatable.View>
         ))}
       </ScrollView>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 

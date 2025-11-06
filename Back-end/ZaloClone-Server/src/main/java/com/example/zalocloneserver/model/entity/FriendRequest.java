@@ -1,6 +1,5 @@
 package com.example.zalocloneserver.model.entity;
 
-import com.example.zalocloneserver.model.constants.FriendRequestStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -28,9 +27,5 @@ public class FriendRequest {
 
     private String message;
 
-    @Enumerated(EnumType.STRING)
-    private FriendRequestStatus status;
-
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 }

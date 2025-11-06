@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TextInput, Pressable, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
@@ -38,8 +39,9 @@ export default function ContactsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Thanh tìm kiếm với shadow động*/}
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
+        {/* Thanh tìm kiếm với shadow động*/}
       <Animated.View style={[
         styles.searchBox,
         {
@@ -88,11 +90,16 @@ export default function ContactsScreen() {
         )}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f8fafd',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8fafd',

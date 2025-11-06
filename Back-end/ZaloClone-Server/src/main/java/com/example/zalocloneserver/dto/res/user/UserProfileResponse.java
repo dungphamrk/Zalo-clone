@@ -12,10 +12,8 @@ import java.time.LocalDateTime;
 @Builder
 public class UserProfileResponse {
     private String avatarUrl;
-    private String bio;
     private LocalDateTime birthday;
     private Gender gender;
-    private String location;
     private LocalDateTime lastActive;
     private Presence presence;
 }

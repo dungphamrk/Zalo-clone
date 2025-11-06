@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, AntDesign } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
@@ -18,7 +19,8 @@ export default function ExploreScreen() {
   const [search, setSearch] = useState('');
   const filtered = features.filter(f => f.label.toLowerCase().includes(search.toLowerCase()));
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
       <Animatable.View animation="bounceInDown" duration={550} style={styles.headerBox}>
         <Text style={styles.headerTitle}>Khám phá</Text>
         <Animatable.View animation="bounceIn" delay={100}>
@@ -37,7 +39,7 @@ export default function ExploreScreen() {
             <Pressable style={({ pressed }) => [styles.featureBox, pressed && { transform:[{scale:0.97}] }]} android_ripple={{color:'#e0f4fa'}}>
               <Animatable.View animation="bounceIn" delay={index*110+140} style={styles.featureIconBox}>{item.icon}</Animatable.View>
               <View style={{ flex:1 }}>
-                <Text style={styles.label}>{item.label}</Text>
+            <Text style={styles.label}>{item.label}</Text>
                 {!!item.desc && <Text style={styles.desc}>{item.desc}</Text>}
               </View>
               <Feather name="chevron-right" size={20} color="#adb5bd" />
@@ -47,11 +49,13 @@ export default function ExploreScreen() {
         style={{ marginTop: 7 }}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#028fe7' },
   container: { flex: 1, backgroundColor: '#f8fafd' },
   headerBox: {
     flexDirection: 'row', alignItems: 'center', height: 60, backgroundColor: '#028fe7',

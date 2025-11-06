@@ -50,7 +50,7 @@ export default function MessageScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top","left","right"]}>
-      <View style={styles.container}>
+    <View style={styles.container}>
         {/* Header với icon vector */}
         <View style={styles.headerBox}>
           <Text style={styles.headerTitle}>Tin nhắn</Text>
@@ -109,9 +109,9 @@ export default function MessageScreen() {
           ))}
         </View>
         {/* Danh sách chat có animation */}
-        <FlatList
+      <FlatList
           data={filteredChats}
-          keyExtractor={item => item.id}
+        keyExtractor={item => item.id}
           renderItem={({ item, index }) => (
             <Animatable.View
               animation="fadeInUp"
@@ -127,20 +127,20 @@ export default function MessageScreen() {
                   style={({ pressed }) => [styles.chatItem, pressed && { transform: [{ scale: 0.96 }] }]}
                   onPress={() => router.push('/chat')}
                 >
-                  <Image source={{ uri: item.avatar }} style={styles.avatar} />
-                  <View style={styles.chatInfo}>
-                    <Text style={styles.userName}>{item.name}</Text>
-                    <Text style={styles.lastMessage}>{item.lastMessage}</Text>
-                  </View>
-                  <Text style={styles.time}>{item.time}</Text>
+            <Image source={{ uri: item.avatar }} style={styles.avatar} />
+            <View style={styles.chatInfo}>
+              <Text style={styles.userName}>{item.name}</Text>
+              <Text style={styles.lastMessage}>{item.lastMessage}</Text>
+            </View>
+            <Text style={styles.time}>{item.time}</Text>
                 </Pressable>
               </Animatable.View>
             </Animatable.View>
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
           showsVerticalScrollIndicator={false}
-        />
-      </View>
+      />
+    </View>
     </SafeAreaView>
   );
 }

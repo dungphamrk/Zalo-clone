@@ -9,5 +9,4 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DataResponse<T> {
     private T items;
-    private Pagination pagination;
 }

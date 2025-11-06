@@ -30,7 +30,7 @@ public class APIResponse<T> {
         response.setSuccess(true);
         response.setMessage(message);
         response.setStatusCode(status);
-        response.setData(data != null ? new DataResponse<>(data, null) : null);
+        response.setData(data != null ? new DataResponse<>(data) : null);
         response.setErrors(null);
         return response;
     }

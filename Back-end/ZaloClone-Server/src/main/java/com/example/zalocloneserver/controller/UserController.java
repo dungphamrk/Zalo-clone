@@ -1,9 +1,12 @@
 package com.example.zalocloneserver.controller;
 
+import com.example.zalocloneserver.dto.req.auth.UserRequest;
+import com.example.zalocloneserver.dto.req.user.ChangePasswordRequest;
 import com.example.zalocloneserver.dto.res.base.APIResponse;
 import com.example.zalocloneserver.dto.res.user.UpdateProfileRequest;
 import com.example.zalocloneserver.dto.res.user.UserProfileResponse;
 import com.example.zalocloneserver.dto.res.user.UserResponse;
+import com.example.zalocloneserver.exception.UserNotFoundException;
 import com.example.zalocloneserver.model.entity.User;
 import com.example.zalocloneserver.repository.IUserRepository;
 import com.example.zalocloneserver.services.IUserService;
@@ -52,7 +55,16 @@ public class UserController {
                                                             Principal principal) {
         User currentUser = userRepository.findByUsername(principal.getName())
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-        userService.changePassword(currentUser.getUserId(), request);
+        userService.changePassword(currentUser.getId(), request);
         return ResponseEntity.ok(APIResponse.success(null, "Password changed successfully"));
     }
+    @GetMapping("/search")
+    @Operation(summary = "Tìm kiếm user theo số điện thoại", description = "Trả về thông tin user nếu tồn tại")
+    public ResponseEntity<APIResponse<UserResponse>> findByPhone(
+            @RequestParam("phone") String phone
+    ) {
+        UserResponse data = userService.findByPhone(phone);
+        return ResponseEntity.ok(APIResponse.success(data, "Tìm kiếm người dùng thành công"));
+    }
+
 }
