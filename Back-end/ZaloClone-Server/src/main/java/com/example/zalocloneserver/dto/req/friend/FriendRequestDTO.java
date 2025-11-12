@@ -15,5 +15,4 @@ import java.time.LocalDateTime;
 @Builder
 public class FriendRequestDTO {
     private Long toUserId;
-    private String message;
 }

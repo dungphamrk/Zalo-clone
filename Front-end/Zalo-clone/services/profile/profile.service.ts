@@ -56,18 +56,61 @@ export const uploadAvatar = async (
   fileUri: string
 ): Promise<SingleResponse<ProfileResponse>> => {
   try {
+    // Get file extension from URI
+    const uriParts = fileUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    const mimeType = fileType === 'png' ? 'image/png' : 'image/jpeg';
+    
     const formData = new FormData();
-    formData.append('avatar', {
-      uri: fileUri,
-      type: 'image/jpeg',
-      name: 'avatar.jpg',
-    } as any);
+    
+    // Trên web, cần convert URI thành Blob/File
+    // Trên React Native, dùng format {uri, type, name}
+    if (typeof window !== 'undefined') {
+      // Web: Xử lý các loại URI khác nhau
+      try {
+        let blob: Blob;
+        
+        if (fileUri.startsWith('data:')) {
+          // Data URL: convert trực tiếp
+          const response = await fetch(fileUri);
+          blob = await response.blob();
+        } else if (fileUri.startsWith('blob:')) {
+          // Blob URL: fetch trực tiếp
+          const response = await fetch(fileUri);
+          blob = await response.blob();
+        } else if (fileUri.startsWith('http://') || fileUri.startsWith('https://')) {
+          // HTTP URL: fetch từ server
+          const response = await fetch(fileUri);
+          blob = await response.blob();
+        } else {
+          // Local file path trên web - thử fetch
+          const response = await fetch(fileUri);
+          blob = await response.blob();
+        }
+        
+        const fileName = `avatar_${Date.now()}.${fileType}`;
+        const fileObj = new File([blob], fileName, { type: mimeType });
+        formData.append('avatar', fileObj);
+      } catch (err) {
+        console.error('[uploadAvatar] Error converting file to Blob:', err, 'URI:', fileUri);
+        // Fallback: dùng format React Native
+        formData.append('avatar', {
+          uri: fileUri,
+          type: mimeType,
+          name: `avatar.${fileType}`,
+        } as any);
+      }
+    } else {
+      // React Native: dùng format {uri, type, name}
+      formData.append('avatar', {
+        uri: fileUri,
+        type: mimeType,
+        name: `avatar.${fileType}`,
+      } as any);
+    }
 
-    const res = await axiosInstance.post('/users/me/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    // QUAN TRỌNG: Không set Content-Type, để axios interceptor xử lý
+    const res = await axiosInstance.post('/users/me/avatar', formData);
 
     return res.data;
   } catch (error) {

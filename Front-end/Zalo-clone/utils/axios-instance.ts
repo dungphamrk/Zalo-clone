@@ -13,6 +13,43 @@ export const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem("ACCESS_TOKEN");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  
+  // Nếu là FormData, xóa Content-Type để axios tự động set multipart/form-data với boundary
+  // QUAN TRỌNG: Phải xóa Content-Type để axios tự động thêm boundary
+  // Trên web, axios có thể thêm charset=UTF-8, cần xóa hoàn toàn để backend chấp nhận
+  if (config.data instanceof FormData) {
+    // Xóa Content-Type từ tất cả các nơi có thể
+    delete config.headers['Content-Type'];
+    delete config.headers['content-type'];
+    if (config.headers.common) {
+      delete config.headers.common['Content-Type'];
+      delete config.headers.common['content-type'];
+    }
+    if (config.headers.post) {
+      delete config.headers.post['Content-Type'];
+      delete config.headers.post['content-type'];
+    }
+    
+    // Trên web, override transformRequest để đảm bảo không có charset
+    if (typeof window !== 'undefined') {
+      // Lưu transformRequest gốc nếu có
+      const originalTransformRequest = config.transformRequest;
+      config.transformRequest = [(data, headers) => {
+        // Xóa Content-Type từ headers nếu có
+        if (headers) {
+          delete headers['Content-Type'];
+          delete headers['content-type'];
+        }
+        // Nếu có transformRequest gốc, gọi nó
+        if (originalTransformRequest && Array.isArray(originalTransformRequest)) {
+          return originalTransformRequest[0](data, headers);
+        }
+        // Trả về FormData nguyên bản
+        return data;
+      }];
+    }
+  }
+  
   return config;
 });
 

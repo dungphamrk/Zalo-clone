@@ -10,11 +10,14 @@ import com.example.zalocloneserver.model.constants.MemberRole;
 import com.example.zalocloneserver.model.entity.Conversation;
 import com.example.zalocloneserver.model.entity.ConversationMember;
 import com.example.zalocloneserver.model.entity.User;
+import com.example.zalocloneserver.repository.IConversationMemberRepository;
 import com.example.zalocloneserver.repository.IConversationRepository;
 import com.example.zalocloneserver.repository.IFriendRepository;
+import com.example.zalocloneserver.repository.IMessageRepository;
 import com.example.zalocloneserver.repository.IUserRepository;
 import com.example.zalocloneserver.services.IConversationService;
 import com.example.zalocloneserver.services.IMessageService;
+import com.example.zalocloneserver.services.INotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -26,8 +29,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -37,9 +39,12 @@ public class ConversationController {
 
     private final IConversationService conversationService;
     private final IMessageService messageService;
+    private final INotificationService notificationService;
     private final IUserRepository userRepository;
     private final IFriendRepository friendRepository;
     private final IConversationRepository conversationRepository;
+    private final IConversationMemberRepository conversationMemberRepository;
+    private final IMessageRepository messageRepository;
 
     // Create a group conversation. Only friends of creator will be added from provided memberIds.
     @PostMapping("/group")
@@ -150,7 +155,7 @@ public class ConversationController {
 
         Conversation conv = conversationRepository.findById(conversationId).orElseThrow(() -> new RuntimeException("Conversation not found"));
 
-        boolean isMember = conv.getMembers().stream().anyMatch(m -> m.getUser().getId().equals(requester.getId()));
+        boolean isMember = conversationMemberRepository.existsByConversation_IdAndUser_Id(conv.getId(), requester.getId());
         if (!isMember) return ResponseEntity.status(403).body("Only conversation members can view messages");
 
         // validate page/size
@@ -166,7 +171,7 @@ public class ConversationController {
 
         Page<MessageResponse> messages = messageService.getMessagesForConversation(conversationId, pageable);
 
-        return ResponseEntity.ok(messages);
+        return ResponseEntity.ok(APIResponse.success(messages, "Get messages successfully"));
     }
 
     // Lấy 1 message cụ thể trong conversation
@@ -177,15 +182,88 @@ public class ConversationController {
         User requester = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
 
         Conversation conv = conversationRepository.findById(conversationId).orElseThrow(() -> new RuntimeException("Conversation not found"));
-        boolean isMember = conv.getMembers().stream().anyMatch(m -> m.getUser().getId().equals(requester.getId()));
+        boolean isMember = conversationMemberRepository.existsByConversation_IdAndUser_Id(conv.getId(), requester.getId());
         if (!isMember) return ResponseEntity.status(403).body("Only conversation members can view messages");
 
         MessageResponse resp = messageService.getMessageForConversation(conversationId, messageId);
         return ResponseEntity.ok(resp);
     }
 
+    // Đánh dấu conversation đã đọc
+    @PostMapping("/{conversationId}/mark-as-read")
+    public ResponseEntity<APIResponse<Map<String, Object>>> markAsRead(@PathVariable Long conversationId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth.getName();
+        User requester = userRepository.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+
+        Conversation conv = conversationRepository.findById(conversationId).orElseThrow(() -> new RuntimeException("Conversation not found"));
+        boolean isMember = conversationMemberRepository.existsByConversation_IdAndUser_Id(conv.getId(), requester.getId());
+        if (!isMember) {
+            return ResponseEntity.status(403).body(APIResponse.error("Only conversation members can mark as read", null));
+        }
+
+        ConversationMember member = conversationMemberRepository.findByConversationAndUser(conv, requester);
+        if (member == null) {
+            return ResponseEntity.status(404).body(APIResponse.error("Member not found", null));
+        }
+
+        // Cập nhật lastReadAt
+        member.setLastReadAt(java.time.LocalDateTime.now());
+        conversationMemberRepository.save(member);
+
+        // Xóa các notification liên quan đến conversation này
+        notificationService.deleteNotificationsByConversation(requester, conv);
+
+        return ResponseEntity.ok(APIResponse.success(Map.of("conversationId", conversationId, "markedAt", member.getLastReadAt()), "Marked as read successfully"));
+    }
+
     // --- helper ---
     private ConversationResponse toConversationResponse(Conversation conv) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth != null ? auth.getName() : null;
+        User currentUser = username != null ? userRepository.findByUsername(username).orElse(null) : null;
+        
+        // Lấy tin nhắn cuối cùng
+        com.example.zalocloneserver.model.entity.Message lastMsg = messageRepository.findTopByConversationOrderByCreatedAtDesc(conv);
+        String lastMessageContent = null;
+        Long lastMessageSenderId = null;
+        String lastMessageSenderName = null;
+        
+        if (lastMsg != null && !lastMsg.isDeleted()) {
+            lastMessageContent = lastMsg.getContent();
+            if (lastMsg.getSender() != null) {
+                lastMessageSenderId = lastMsg.getSender().getId();
+                // Lấy displayName từ profile, fallback về username nếu không có
+                if (lastMsg.getSender().getProfile() != null && lastMsg.getSender().getProfile().getDisplayName() != null) {
+                    lastMessageSenderName = lastMsg.getSender().getProfile().getDisplayName();
+                } else {
+                    lastMessageSenderName = lastMsg.getSender().getUsername();
+                }
+            }
+            // Nếu là tin nhắn có attachment, hiển thị "[Hình ảnh]" hoặc "[File]"
+            if (lastMessageContent == null || lastMessageContent.trim().isEmpty()) {
+                if (lastMsg.getAttachments() != null && !lastMsg.getAttachments().isEmpty()) {
+                    lastMessageContent = "[Hình ảnh]";
+                } else {
+                    lastMessageContent = "[Tin nhắn]";
+                }
+            }
+        }
+        
+        // Tính unreadCount: số tin nhắn sau lastReadAt của current user
+        Long unreadCount = 0L;
+        if (currentUser != null) {
+            ConversationMember member = conversationMemberRepository.findByConversationAndUser(conv, currentUser);
+            if (member != null && member.getLastReadAt() != null && lastMsg != null) {
+                // Đếm số tin nhắn được tạo sau lastReadAt
+                unreadCount = messageRepository.countByConversationAndCreatedAtAfterAndDeletedFalse(
+                    conv, member.getLastReadAt());
+            } else if (member != null && member.getLastReadAt() == null && lastMsg != null) {
+                // Nếu chưa đọc lần nào, đếm tất cả tin nhắn
+                unreadCount = messageRepository.countByConversationAndDeletedFalse(conv);
+            }
+        }
+        
         ConversationResponse resp = ConversationResponse.builder()
                 .id(conv.getId())
                 .type(conv.getType())
@@ -195,8 +273,12 @@ public class ConversationController {
                 .creatorName(conv.getCreator() != null && conv.getCreator().getProfile() != null ? conv.getCreator().getProfile().getDisplayName() : null)
                 .createdAt(conv.getCreatedAt())
                 .lastMessageAt(conv.getLastMessageAt())
+                .lastMessage(lastMessageContent)
+                .lastMessageSenderId(lastMessageSenderId)
+                .lastMessageSenderName(lastMessageSenderName)
                 .isPublic(conv.isPublic())
                 .members(conv.getMembers().stream().map(this::toMemberResponse).collect(Collectors.toSet()))
+                .unreadCount(unreadCount)
                 .build();
         return resp;
     }
@@ -204,7 +286,9 @@ public class ConversationController {
     private ConversationMemberResponse toMemberResponse(ConversationMember m) {
         return ConversationMemberResponse.builder()
                 .userId(m.getUser().getId())
-                .userName(m.getUser().getProfile() != null ? m.getUser().getProfile().getDisplayName() : null)
+                .userName(m.getUser().getProfile() != null && m.getUser().getProfile().getDisplayName() != null 
+                        ? m.getUser().getProfile().getDisplayName() 
+                        : m.getUser().getUsername())
                 .avatarUrl(m.getUser().getProfile() != null ? m.getUser().getProfile().getAvatarUrl() : null)
                 .role(m.getRole())
                 .joinedAt(m.getUser().getProfile() != null ? m.getUser().getProfile().getLastActive() : null)

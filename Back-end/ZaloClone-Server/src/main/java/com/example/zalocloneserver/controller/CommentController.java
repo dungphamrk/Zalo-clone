@@ -36,7 +36,6 @@ public class CommentController{
     }
 
     @PostMapping("/{commentId}/replies")
-    @Operation(summary = "Trả lời bình luận", description = "Thêm reply cho một comment")
     public ResponseEntity<APIResponse<CommentResponse>> createReply(
             @PathVariable Long commentId,
             @RequestBody ReplyRequest request

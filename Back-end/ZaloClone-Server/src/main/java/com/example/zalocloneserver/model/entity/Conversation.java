@@ -10,14 +10,17 @@ import java.util.Set;
 
 @Entity
 @Table(name = "conversations")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Conversation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @Enumerated(EnumType.STRING)
@@ -34,11 +37,11 @@ public class Conversation {
     private LocalDateTime lastMessageAt;
     private boolean isPublic;
 
-    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<ConversationMember> members = new HashSet<>();
 
-    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<Message> messages = new HashSet<>();
 }

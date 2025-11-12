@@ -120,8 +120,12 @@ export const useLogoutMutation = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: logout,
+        mutationFn: () => {
+            console.log('useLogoutMutation: mutationFn called');
+            return logout();
+        },
         onSuccess: async () => {
+            console.log('useLogoutMutation: onSuccess called');
             await AsyncStorage.removeItem("ACCESS_TOKEN");
             await AsyncStorage.removeItem("REFRESH_TOKEN");
 
@@ -136,12 +140,20 @@ export const useLogoutMutation = () => {
             router.replace("/(auth)/login");
         },
         onError: (err) => {
+            console.error('useLogoutMutation: onError called', err);
+            // Vẫn xóa token local ngay cả khi API call thất bại
+            AsyncStorage.removeItem("ACCESS_TOKEN").catch(console.error);
+            AsyncStorage.removeItem("REFRESH_TOKEN").catch(console.error);
+            queryClient.removeQueries({ queryKey: PROFILE_KEY });
 
             Toast.show({
                 type: 'error',
                 text1: 'Đăng xuất thất bại',
                 text2: `Lỗi: ${(err as Error).message}`,
             });
+
+            // Vẫn redirect về login
+            router.replace("/(auth)/login");
         },
     });
 };

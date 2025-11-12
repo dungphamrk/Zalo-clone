@@ -9,14 +9,17 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "conversation_members",
         uniqueConstraints = @UniqueConstraint(columnNames = {"conversationId", "userId"}))
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class ConversationMember {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne
@@ -31,4 +34,6 @@ public class ConversationMember {
     private MemberRole role;
 
     private LocalDateTime muteUntil;
+    
+    private LocalDateTime lastReadAt; // Thời điểm đọc tin nhắn cuối cùng
 }

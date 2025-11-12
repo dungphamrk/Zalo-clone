@@ -18,10 +18,15 @@ export interface Post {
   name: string;
   content: string;
   image?: string;
+  mediaUrls?: string[];
   time: string;
   likes: number;
   isLikedByMe: boolean;
+  commentCount?: number;
   comments: Comment[];
+  createdAt?: string;
+  visibility?: 'PUBLIC' | 'PRIVATE';
+  isFriend?: boolean; // Để biết có phải bạn bè không
 }
 
 export interface Story {
@@ -35,7 +40,8 @@ export interface Story {
 // Request DTOs
 export interface CreatePostRequest {
   content: string;
-  image?: string;
+  visibility?: 'PUBLIC' | 'PRIVATE';
+  mediaFiles?: (ImagePicker.ImagePickerAsset | { uri: string; type?: string; name?: string })[];
 }
 
 export interface CreateCommentRequest {

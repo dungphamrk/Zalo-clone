@@ -1,9 +1,10 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TextInput, Pressable, Animated, Modal, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
-import { Contact, CreateContactRequest, FriendRequestIncoming, FriendRequestResponse, FriendRequestSent, UpdateContactRequest } from '@/types/interfaces/contact.interface'; // Import các type cần thiết
+import { Contact, FriendRequestIncoming, FriendRequestResponse, FriendRequestSent, UpdateContactRequest } from '@/types/interfaces/contact.interface'; // Import các type cần thiết
+import { useQueryClient } from '@tanstack/react-query';
 import { 
     useContacts, 
     useSearchContacts,
@@ -13,8 +14,13 @@ import {
     // SỬA: Loại bỏ các hook cũ, sử dụng các hook đã ánh xạ chức năng
     useCreateContactMutation, // <--- Dùng để ACCEPT
     useUpdateContactMutation, // <--- Dùng để REJECT
-    useCancelFriendRequestMutation
+    useCancelFriendRequestMutation,
+    contactKeys
 } from '@/hooks/contacts/useContacts'; 
+import { useCreateOrGetPrivateChat, chatKeys as chatQueryKeys } from '@/hooks/chat/useChat';
+import { useRouter } from 'expo-router';
+import Toast from 'react-native-toast-message';
+import customAvatar from '@/utils/avatar';
 
 interface AcceptRequestPayload {
     requestId: string;
@@ -28,16 +34,21 @@ function RequestsModal({ visible, onClose, onAccept, onReject, onCancel }: {
     onReject: (requestId: string) => void;
     onCancel: (requestId: string) => void;
 }) {
-    // Sử dụng hooks để lấy requests
+    // Sử dụng hooks để lấy requests - chỉ fetch khi modal visible
     const { data: incoming = [], isLoading: loadingIncoming } = useIncomingRequests();
     const { data: outgoing = [], isLoading: loadingOutgoing } = useOutgoingRequests();
     
     const [activeTab, setActiveTab] = useState<'incoming' | 'outgoing'>('incoming');
     
-    const listData : FriendRequestResponse[] = activeTab === 'incoming' ? incoming : outgoing;
+    // Memoize listData để tránh tạo array mới mỗi lần render
+    const listData = useMemo<FriendRequestResponse[]>(() => {
+        return activeTab === 'incoming' ? incoming : outgoing;
+    }, [activeTab, incoming, outgoing]);
+    
     const isLoading = loadingIncoming || loadingOutgoing;
 
-  const renderRequestItem = ({ item }: { item: FriendRequestResponse }) => {
+  // Memoize renderRequestItem để tránh tạo function mới mỗi lần render
+  const renderRequestItem = useCallback(({ item }: { item: FriendRequestResponse }) => {
     // 1. Xác định thông tin của đối phương dựa trên tab
     const isIncoming = activeTab === 'incoming';
     
@@ -46,10 +57,14 @@ function RequestsModal({ visible, onClose, onAccept, onReject, onCancel }: {
     const opponentId = isIncoming 
         ? (item as FriendRequestIncoming).id 
         : (item as FriendRequestSent).id;
-        
+
     const opponentUsername = isIncoming 
         ? (item as FriendRequestIncoming).fromUsername 
         : (item as FriendRequestSent).toUsername;
+
+    const opponentDisplayName = isIncoming 
+        ? (item as FriendRequestIncoming).fromDisplayName || opponentUsername
+        : (item as FriendRequestSent).toDisplayName || opponentUsername;
 
     const opponentAvatar = isIncoming 
         ? (item as FriendRequestIncoming).fromAvatar 
@@ -59,13 +74,12 @@ function RequestsModal({ visible, onClose, onAccept, onReject, onCancel }: {
     return (
         <View style={requestModalStyles.requestItem}>
             <Image 
-                source={{ uri: opponentAvatar || 'default_avatar_url' }} 
+                source={opponentAvatar ? { uri: opponentAvatar } : customAvatar} 
                 style={requestModalStyles.avatar} 
             />
             <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={requestModalStyles.userName}>{opponentUsername}</Text>
-                {/* Giả định số điện thoại là tên người dùng */}
-                <Text style={requestModalStyles.phone}>{opponentUsername}</Text> 
+                <Text style={requestModalStyles.userName}>{opponentDisplayName}</Text>
+                <Text style={requestModalStyles.phone}>@{opponentUsername}</Text> 
             </View>
             <View style={{ flexDirection: 'row' }}>
                 {isIncoming ? (
@@ -97,7 +111,7 @@ function RequestsModal({ visible, onClose, onAccept, onReject, onCancel }: {
             </View>
         </View>
     );
-};
+  }, [activeTab, onAccept, onReject, onCancel]);
     return (
         <Modal transparent visible={visible} animationType="slide">
             <TouchableOpacity style={requestModalStyles.modalOverlay} activeOpacity={1} onPressOut={onClose}>
@@ -140,7 +154,7 @@ function RequestsModal({ visible, onClose, onAccept, onReject, onCancel }: {
 
 // Giữ nguyên ProfileViewModal vì nó không liên quan đến logic mutation
 
-function ProfileViewModal({ visible, onClose, contact }: { visible: boolean; onClose: () => void; contact: Contact | null }) {
+function ProfileViewModal({ visible, onClose, contact, onStartChat }: { visible: boolean; onClose: () => void; contact: Contact | null; onStartChat: (contact: Contact) => void }) {
     if (!contact) return null;
 
     return (
@@ -148,7 +162,10 @@ function ProfileViewModal({ visible, onClose, contact }: { visible: boolean; onC
             <TouchableOpacity style={requestModalStyles.modalOverlay} activeOpacity={1} onPressOut={onClose}>
                 <View style={[requestModalStyles.modalBox, { padding: 0 }]} onStartShouldSetResponder={() => true}>
                     <View style={profileModalStyles.header}>
-                        <Image source={{ uri: contact.avatarUrl || 'default_avatar_url' }} style={profileModalStyles.profileAvatar} />
+                        <Image 
+                          source={contact.avatarUrl ? { uri: contact.avatarUrl } : customAvatar} 
+                          style={profileModalStyles.profileAvatar} 
+                        />
                         <Text style={profileModalStyles.profileName}>{contact.friendName}</Text>
                         <Text style={profileModalStyles.profileUsername}>@{contact.username || 'N/A'}</Text>
                     </View>
@@ -165,7 +182,7 @@ function ProfileViewModal({ visible, onClose, contact }: { visible: boolean; onC
                     </View>
                     
                     <View style={profileModalStyles.actionFooter}>
-                        <Pressable style={profileModalStyles.footerBtn} onPress={() => { Alert.alert('Chức năng Chat'); onClose(); }}>
+                        <Pressable style={profileModalStyles.footerBtn} onPress={() => onStartChat(contact)}>
                             <Ionicons name="chatbubble-ellipses-sharp" size={22} color="#2994f2" />
                             <Text style={profileModalStyles.footerText}>Nhắn tin</Text>
                         </Pressable>
@@ -187,6 +204,8 @@ export default function ContactsScreen() {
     const [showRequestsModal, setShowRequestsModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+    const queryClient = useQueryClient();
+    const router = useRouter();
 
     const shadowAnim = useRef(new Animated.Value(2)).current;
 
@@ -194,8 +213,8 @@ export default function ContactsScreen() {
     const { data: friends = [], isLoading: loadingFriends, isError: errorFriends } = useContacts();
     
     const { data: searchResults = [], isLoading: loadingSearch } = useSearchContacts(search);
-    const { data: incomingRequests = [], isLoading: loadingIncoming } = useIncomingRequests();
-    const { data: outgoingRequests = [], isLoading: loadingOutgoing } = useOutgoingRequests();
+    const { data: incomingRequests = [] } = useIncomingRequests();
+    const { data: outgoingRequests = [] } = useOutgoingRequests();
 
     
     // 2. MUTATION HOOKS (SỬ DỤNG CÁC HOOK ĐÃ ÁNH XẠ CHỨC NĂNG)
@@ -203,9 +222,11 @@ export default function ContactsScreen() {
     const acceptMutation = useCreateContactMutation(); // Dùng createContact để Accept
     const rejectMutation = useUpdateContactMutation(); // Dùng updateContact để Reject
     const cancelRequestMutation = useCancelFriendRequestMutation();
+    const createChatMutation = useCreateOrGetPrivateChat();
 
     // 3. LOGIC Xử lý Requests (Sử dụng Mutations đã đổi tên và cấu trúc)
-    const handleAcceptRequest = (requestId: string) => {
+    // Memoize handlers để tránh tạo function mới mỗi lần render
+    const handleAcceptRequest = useCallback((requestId: string) => {
         // SỬA LỖI: Sử dụng AcceptRequestPayload thay vì CreateContactRequest
         const data: AcceptRequestPayload = { requestId: requestId }; 
         
@@ -218,9 +239,9 @@ export default function ContactsScreen() {
             },
             onError: (err) => console.error("Accept failed:", err),
         });
-    };
+    }, [acceptMutation]);
     
-    const handleRejectRequest = (requestId: string) => {
+    const handleRejectRequest = useCallback((requestId: string) => {
         // useUpdateContactMutation (Reject) mong đợi { requestId: string, data: UpdateContactRequest }
         const data: UpdateContactRequest = {}; // UpdateContactRequest có thể trống nếu chỉ cần ID để Từ chối
         
@@ -231,9 +252,9 @@ export default function ContactsScreen() {
             },
             onError: (err) => console.error("Reject failed:", err),
         });
-    };
+    }, [rejectMutation]);
 
-    const handleCancelRequest = (id: string) => {
+    const handleCancelRequest = useCallback((id: string) => {
         // useCancelFriendRequestMutation mong đợi requestId (string)
         cancelRequestMutation.mutate(id, {
             onSuccess: () => {
@@ -242,7 +263,7 @@ export default function ContactsScreen() {
             },
             onError: (err) => console.error("Cancel failed:", err),
         });
-    };
+    }, [cancelRequestMutation]);
     
     // Hàm mở Profile Modal
     const handleOpenProfile = (contact: Contact) => {
@@ -250,7 +271,58 @@ export default function ContactsScreen() {
         setShowProfileModal(true);
     };
     
+    const handleStartChat = (contact: Contact) => {
+        const rawId = contact.userId || contact.id;
+        const otherUserId = Number(rawId);
+        if (!rawId || Number.isNaN(otherUserId)) {
+            Toast.show({
+                type: 'error',
+                text1: 'Không thể mở chat',
+                text2: 'Thiếu thông tin người dùng.',
+            });
+            return;
+        }
+        createChatMutation.mutate(otherUserId, {
+            onSuccess: (response) => {
+                const conversationId = response.data?.items?.id;
+                queryClient.invalidateQueries({ queryKey: chatQueryKeys.lists() });
+                setShowProfileModal(false);
+                if (conversationId) {
+                    router.push({ pathname: '/chat', params: { chatId: String(conversationId) } });
+                } else {
+                    Toast.show({
+                        type: 'info',
+                        text1: 'Đã tạo cuộc trò chuyện',
+                        text2: 'Mở danh sách tin nhắn để xem.',
+                    });
+                }
+            },
+            onError: (error: any) => {
+                Toast.show({
+                    type: 'error',
+                    text1: 'Không thể tạo cuộc trò chuyện',
+                    text2: error?.message || 'Đã xảy ra lỗi.',
+                });
+            },
+        });
+    };
+    
     // Logic hiển thị danh sách (Giữ nguyên)
+    // Memoize separator object để tránh tạo mới mỗi lần render
+    const separatorContact = useMemo(() => ({
+        id: 'sep1', 
+        userId: 'sep1',
+        friendName: 'Kết quả tìm kiếm chính xác', 
+        avatarUrl: '', 
+        isFriend: false, 
+        username: '', 
+        email: '',
+        friend: false,  
+        status: 'NEW' as const,
+        createdAt: new Date().toISOString(), 
+        updatedAt: new Date().toISOString() 
+    } as Contact), []); // Chỉ tạo một lần
+
     const getDisplayContacts = useMemo(() => {
         const q = search.trim().toLowerCase();
         
@@ -264,29 +336,48 @@ export default function ContactsScreen() {
                 // Thêm một item Contact làm separator để phân biệt Search Result
                 return [
                     ...existingFriends, 
-                    { 
-                        id: 'sep1', 
-                        friendName: 'Kết quả tìm kiếm chính xác', 
-                        avatarUrl: '', 
-                        isFriend: false, 
-                        username: '', 
-                        email: '',
-                        friend: false,  
-                        userId: 'sep1', // Đảm bảo có userId
-                        createdAt: new Date().toISOString(), 
-                        updatedAt: new Date().toISOString() 
-                    } as Contact, 
+                    separatorContact, 
                     ...nonFriends
                 ];
             }
             return existingFriends;
         }
         return [];
-    }, [search, friends, searchResults]);
+    }, [search, friends, searchResults, separatorContact]);
 
-    const sendFriendRequest = (id: string) => {
-        // sendRequestMutation mong đợi FriendRequestDTO { toUserId: string, message?: string }
-        sendRequestMutation.mutate({ toUserId: id }); // Gửi với toUserId
+    const sendFriendRequest = (rawId: string) => {
+        if (!rawId || rawId.startsWith('sep')) {
+            return;
+        }
+        const numericId = Number(rawId);
+        if (Number.isNaN(numericId)) {
+            console.warn('Invalid friend request target id:', rawId);
+            return;
+        }
+        console.log('sendFriendRequest -> payload', { rawId, numericId, typeOfRaw: typeof rawId });
+        // sendRequestMutation mong đợi FriendRequestDTO { toUserId: number, message?: string }
+        sendRequestMutation.mutate(
+            { toUserId: numericId },
+            {
+                onSuccess: () => {
+                    if (search.trim()) {
+                        queryClient.setQueryData<Contact[] | undefined>(
+                            contactKeys.listSearch(search),
+                            (old) => {
+                                if (Array.isArray(old)) { 
+                                    return old.map(contact =>
+                                        contact.id === rawId
+                                            ? { ...contact, status: 'PENDING', friend: false }
+                                            : contact
+                                    );
+                                }
+                                return old; 
+                            }
+                        );
+                    }
+                },
+            }
+        );
     };
 
     const animateShadow = (toVal: number) => {
@@ -328,10 +419,13 @@ export default function ContactsScreen() {
             return <Text style={styles.separatorText}>{item.friendName}</Text>;
         }
         
-        // Kiểm tra xem người này có trong danh sách lời mời đi không
-        // Cần dùng item.userId hoặc item.username để kiểm tra với outgoingRequests
-        const isSent = outgoingRequests.some(req => req.id.toString() === item.id);
-        const showAddButton = !item.friend;
+        const status = item.status || (item.friend ? 'FRIEND' : 'NEW');
+        const isFriend = status === 'FRIEND' || item.friend;
+        const isPending = status === 'PENDING';
+        const isSentRequest = outgoingRequests.some(req => req.toUserId?.toString() === (item.userId || item.id));
+        const showAddButton = !isFriend;
+        const isAddDisabled = isPending || isSentRequest || sendRequestMutation.isPending;
+        const addBtnLabel = isPending || isSentRequest ? 'Đang chờ' : 'Kết bạn';
 
         return (
             <Animatable.View animation="fadeInUp" duration={400} delay={index * 50}>
@@ -340,11 +434,37 @@ export default function ContactsScreen() {
                     android_ripple={{color:'#eaf4fb'}}
                     onPress={() => handleOpenProfile(item)} // Mở Profile Modal
                 >
-                    <Image source={{ uri: item.avatarUrl || 'default_avatar_url' }} style={styles.avatar} />
+                    <Image 
+                      source={item.avatarUrl ? { uri: item.avatarUrl } : customAvatar} 
+                      style={styles.avatar} 
+                    />
                     <View style={{ flex:1 }}>
-                        <Text style={[styles.userName, item.friend && { fontWeight: '700' }]}>{item.friendName}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                            <Text style={[styles.userName, isFriend && { fontWeight: '700' }]}>{item.friendName}</Text>
+                            {isFriend && (
+                                <View style={[styles.statusTag, styles.friendTag]}>
+                                    <Ionicons name="checkmark-circle" size={14} color="#fff" />
+                                    <Text style={styles.statusTagText}>Bạn bè</Text>
+                                </View>
+                            )}
+                            {!isFriend && (
+                                <View style={[
+                                    styles.statusTag,
+                                    (isPending || isSentRequest) ? styles.pendingTag : styles.newTag
+                                ]}>
+                                    <Ionicons
+                                        name={(isPending || isSentRequest) ? 'time-outline' : 'person-add-outline'}
+                                        size={14}
+                                        color="#fff"
+                                    />
+                                    <Text style={styles.statusTagText}>
+                                        {(isPending || isSentRequest) ? 'Đang chờ' : 'Người mới'}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                         {item.username ? (
-                            <Text style={styles.username}>@{item.username} 222</Text>
+                            <Text style={styles.username}>@{item.username}</Text>
                         ) : null}
                         <Text style={styles.phone}>{item.username}</Text>
                     </View>
@@ -358,18 +478,21 @@ export default function ContactsScreen() {
                             <Pressable
                                 style={({ pressed }) => [
                                     styles.addBtn,
-                                    isSent && styles.addBtnDisabled,
+                                    (isPending || isSentRequest) && styles.addBtnDisabled,
                                     pressed && { opacity: 0.8 }
                                 ]}
-                                onPress={() => sendFriendRequest(item.id)}
-                                disabled={isSent || sendRequestMutation.isPending}
+                                onPress={() => sendFriendRequest(item.userId || item.id)}
+                                disabled={isAddDisabled}
                             >
-                                <Text style={[styles.addBtnText, isSent && styles.addBtnTextDisabled]}>
-                                    {isSent ? 'Đã gửi' : 'Kết bạn'}
+                                <Text style={[
+                                    styles.addBtnText,
+                                    (isPending || isSentRequest) && styles.addBtnTextDisabled
+                                ]}>
+                                    {addBtnLabel}
                                 </Text>
                             </Pressable>
                         )}
-                        {item.friend && <Ionicons name="chatbubble-ellipses-outline" size={21} color="#4cd964" style={{ marginLeft: 6 }} />}
+                        {isFriend && <Ionicons name="chatbubble-ellipses-outline" size={21} color="#4cd964" style={{ marginLeft: 6 }} />}
 
                     </View>
                 </Pressable>
@@ -445,6 +568,7 @@ export default function ContactsScreen() {
                 visible={showProfileModal}
                 onClose={() => setShowProfileModal(false)}
                 contact={selectedContact}
+                onStartChat={handleStartChat}
             />
         </SafeAreaView>
     );
@@ -481,6 +605,11 @@ const styles = StyleSheet.create({
     addBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
     addBtnTextDisabled: { color: '#7b868c', fontSize: 13 },
     iconBtn: { padding: 6, borderRadius: 15, backgroundColor: '#f5f9ff' },
+    statusTag: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, marginLeft: 6 },
+    statusTagText: { color: '#fff', fontSize: 11, marginLeft: 4 },
+    friendTag: { backgroundColor: '#4cd964' },
+    pendingTag: { backgroundColor: '#f29929' },
+    newTag: { backgroundColor: '#2994f2' },
     emptyText: { textAlign: 'center', color: '#7b868c', marginTop: 30, fontSize: 15 },
 });
 
@@ -495,8 +624,8 @@ const requestModalStyles = StyleSheet.create({
     tabTextActive: { color: '#2994f2' },
     requestItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
     avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e5eaef' },
-    userName: { fontWeight: '600', fontSize: 15 },
-    phone: { fontSize: 12, color: '#7b868c' },
+    userName: { fontWeight: '700', fontSize: 16, color: '#1c2536' },
+    phone: { fontSize: 13, color: '#7b868c', marginTop: 2 },
     btn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
     btnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
 });

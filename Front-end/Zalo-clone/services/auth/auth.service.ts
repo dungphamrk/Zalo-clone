@@ -34,9 +34,12 @@ export const register = async (
 
 export const logout = async (): Promise<SingleResponse<JWTResponse>> => {
   try {
+    console.log('Logout API: Calling /auth/logout');
     const res = await axiosInstance.post("/auth/logout");
+    console.log('Logout API: Response received', res.data);
     return res.data;
   } catch (error) {
+    console.error('Logout API: Error occurred', error);
     throw handleAxiosError(error);
   }
 };

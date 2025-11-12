@@ -19,7 +19,11 @@ public class ConversationResponse {
     private String creatorName;
     private LocalDateTime createdAt;
     private LocalDateTime lastMessageAt;
+    private String lastMessage; // Content of the last message
+    private Long lastMessageSenderId; // ID of the sender of last message
+    private String lastMessageSenderName; // Name of the sender of last message
     private boolean isPublic;
     private Set<ConversationMemberResponse> members;
     private ConversationSettingResponse setting;
+    private Long unreadCount; // Số tin nhắn chưa đọc
 }

@@ -7,13 +7,10 @@
  * - deleteContact (Xóa Contact) <-> Hủy kết bạn (unfriend)
  */
 
-import { Contact, CreateContactRequest, UpdateContactRequest } from '@/types/interfaces/contact.interface';
+import { Contact, CreateContactRequest, UpdateContactRequest, FriendRequestDTO } from '@/types/interfaces/contact.interface';
 import { axiosInstance } from '@/utils/axios-instance';
 import { ListResponse, SingleResponse, PaginationResponse } from '@/utils/response-data'; 
 import { handleAxiosError } from '../error.service';
-
-// Giả định các types được sử dụng:
-interface FriendRequestDTO { toUserId: string; message?: string; } 
 
 // --- I. FRIEND & CONTACT READ OPERATIONS ---
 
@@ -107,14 +104,22 @@ export const deleteContact = async (friendId: string): Promise<SingleResponse<nu
  * Corresponds to: POST /api/v1/friends/sendRequest
  */
 export const sendFriendRequest = async (data: FriendRequestDTO): Promise<SingleResponse<null>> => {
-  try {
-    const res = await axiosInstance.post('/friends/sendRequest', data);
-    console.log("sendRequest",res.data);
+  
+  const toUserId = data.toUserId;
+
+  if (!toUserId || isNaN(toUserId)) {
+    throw new Error('To user ID is missing or invalid when sending friend request.');
+  }
+  
+  try {
+    const res = await axiosInstance.post<SingleResponse<null>>(`/friends/sendRequest?friendId=${toUserId}`);
     
-    return res.data; 
-  } catch (error) {
-    throw handleAxiosError(error);
-  }
+    return res.data; 
+    
+  } catch (error) {
+    console.error('sendRequest Failed:', error);
+    throw handleAxiosError(error);
+  }
 };
 
 

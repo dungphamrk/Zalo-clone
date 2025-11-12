@@ -21,6 +21,7 @@ interface StompContextValue {
   sendMessage: (conversationId: number, content: string, messageType?: string) => void;
   sendTypingIndicator: (conversationId: number) => void;
   markAsRead: (messageId: number, conversationId: number) => void;
+  sendReaction: (conversationId: number, messageId: number, reaction: string, action: 'add' | 'remove') => void;
 }
 
 const StompContext = createContext<StompContextValue | undefined>(undefined);
@@ -33,6 +34,7 @@ export function StompProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== 'authenticated' || !token) {
       if (clientRef.current) {
+        console.log('[STOMP] Deactivating client - not authenticated');
         clientRef.current.deactivate();
         clientRef.current = null;
       }
@@ -41,30 +43,51 @@ export function StompProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Chuyển ws:// thành ws:// hoặc wss:// (không cần convert sang http)
-    const wsUrl = BASE_URL.startsWith('http') 
-      ? BASE_URL.replace(/^http/, 'ws')
-      : BASE_URL;
+    // Đóng connection cũ trước khi tạo mới
+    if (clientRef.current) {
+      console.log('[STOMP] Deactivating old client before creating new one');
+      clientRef.current.deactivate();
+      clientRef.current = null;
+      setConnected(false);
+    }
+
+    // Dùng origin (protocol + host + port) cho WebSocket, loại bỏ phần path (/api/v1)
+    let wsOrigin = BASE_URL;
+    try {
+      const parsed = new URL(BASE_URL);
+      wsOrigin = parsed.origin;
+    } catch (err) {
+      console.warn('[STOMP] Invalid BASE_URL, fallback to raw value:', BASE_URL, err);
+    }
+
+    if (wsOrigin.startsWith('http')) {
+      wsOrigin = wsOrigin.replace(/^http/, 'ws');
+    }
+
     const STOMP_ENDPOINT = '/ws';
+    const wsUrl = `${wsOrigin}${STOMP_ENDPOINT}?access_token=${encodeURIComponent(token)}`;
+
+    console.log('[STOMP] Creating new WebSocket client with URL:', wsUrl.replace(/\?access_token=.*/, '?access_token=***'));
+
     const client = new Client({
       // Dùng WebSocket thuần, KHÔNG dùng SockJS để tránh CORS
-      brokerURL: `${wsUrl}${STOMP_ENDPOINT}?access_token=${token}`,
-      connectHeaders: { 
-        Authorization: `Bearer ${token}` 
+      brokerURL: wsUrl,
+      connectHeaders: {
+        Authorization: `Bearer ${token}`,
+        access_token: token,
       },
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       debug: (frame) => {
         if (__DEV__) {
-          // eslint-disable-next-line no-console
           console.log(`[STOMP] ${frame}`);
         }
       },
     });
 
-    client.onConnect = () => {
-      console.log('✅ [STOMP] Connected to WebSocket');
+    client.onConnect = (frame) => {
+      console.log('✅ [STOMP] Connected to WebSocket', frame);
       setConnected(true);
     };
 
@@ -74,12 +97,25 @@ export function StompProvider({ children }: { children: ReactNode }) {
     };
 
     client.onStompError = (frame) => {
-      console.error('⚠️ [STOMP] Error:', frame.headers['message'], frame.body);
-      console.warn('STOMP error', frame.headers['message'], frame.body);
+      console.error('⚠️ [STOMP] STOMP Error:', {
+        command: frame.command,
+        headers: frame.headers,
+        body: frame.body,
+      });
+      setConnected(false);
     };
 
-    client.onWebSocketClose = () => {
-      console.log('🔌 [STOMP] WebSocket closed');
+    client.onWebSocketError = (event) => {
+      console.error('⚠️ [STOMP] WebSocket error', event);
+      setConnected(false);
+    };
+
+    client.onWebSocketClose = (event) => {
+      console.log('🔌 [STOMP] WebSocket closed', {
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean,
+      });
       setConnected(false);
     };
 
@@ -135,14 +171,11 @@ export function StompProvider({ children }: { children: ReactNode }) {
   const sendMessage = useCallback(
     (conversationId: number, content: string, messageType: string = 'TEXT') => {
       console.log('📤 [STOMP] Sending message:', { conversationId, content, messageType });
-      publish(
-        '/app/chat.send',
-        JSON.stringify({
-          conversationId,
-          content,
-          messageType,
-        }),
-      );
+      publish(`/app/chat/${conversationId}`, JSON.stringify({
+        conversationId,
+        content,
+        messageType,
+      }));
     },
     [publish],
   );
@@ -150,12 +183,9 @@ export function StompProvider({ children }: { children: ReactNode }) {
   // Helper: Gửi typing indicator
   const sendTypingIndicator = useCallback(
     (conversationId: number) => {
-      publish(
-        '/app/chat.typing',
-        JSON.stringify({
-          conversationId,
-        }),
-      );
+      publish(`/app/chat.typing/${conversationId}`, JSON.stringify({
+        conversationId,
+      }));
     },
     [publish],
   );
@@ -174,6 +204,22 @@ export function StompProvider({ children }: { children: ReactNode }) {
     [publish],
   );
 
+  // Helper: Gửi reaction
+  const sendReaction = useCallback(
+    (conversationId: number, messageId: number, reaction: string, action: 'add' | 'remove') => {
+      console.log('📤 [STOMP] Sending reaction:', { conversationId, messageId, reaction, action });
+      publish(
+        `/app/chat.reaction/${conversationId}`,
+        JSON.stringify({
+          messageId,
+          reaction,
+          action,
+        }),
+      );
+    },
+    [publish],
+  );
+
   const value = useMemo<StompContextValue>(
     () => ({ 
       connected, 
@@ -182,8 +228,9 @@ export function StompProvider({ children }: { children: ReactNode }) {
       sendMessage,
       sendTypingIndicator,
       markAsRead,
+      sendReaction,
     }), 
-    [connected, publish, subscribe, sendMessage, sendTypingIndicator, markAsRead],
+    [connected, publish, subscribe, sendMessage, sendTypingIndicator, markAsRead, sendReaction],
   );
 
   return <StompContext.Provider value={value}>{children}</StompContext.Provider>;

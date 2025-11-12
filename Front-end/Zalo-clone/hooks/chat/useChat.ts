@@ -14,8 +14,12 @@ import {
   createOrGetPrivateChat,
   createGroupChat,
 } from '@/services/chat/chat.service';
-import { Message, SendMessageRequest } from '@/types/interfaces/chat.interface';
-import { useEffect, useState } from 'react';
+import { MessageResponseDTO } from '@/types/interfaces/chat.interface';
+import { useEffect } from 'react';
+import { useProfileQuery } from '@/hooks/profile/useProfile';
+import customAvatar from '@/utils/avatar';
+import { notificationKeys } from '@/hooks/notifications/useNotifications';
+import Toast from 'react-native-toast-message';
 // Query keys
 export const chatKeys = {
   all: ['chat'] as const,
@@ -79,6 +83,8 @@ export function useChats() {
   const { data: conversationsData, isLoading } = useChatsQuery();
   const createGroupMutation = useCreateGroupChat();
   const queryClient = useQueryClient();
+  const { data: profile } = useProfileQuery();
+  const currentUserId = profile?.id;
 
   // Transform backend ConversationResponse[] to front-end Conversation[]
   const chats: Conversation[] = conversationsData ? conversationsData.map((conv: any) => {
@@ -103,43 +109,73 @@ export function useChats() {
 
     // For private chats, get the other user's name and avatar
     let displayName = conv.title || 'Chat';
-    let displayAvatar = conv.avatarUrl || 'https://via.placeholder.com/150';
+    let displayAvatar = conv.avatarUrl || null;
+    
     
     if (!isGroup && conv.members && Array.isArray(conv.members)) {
       // Find the other member (not current user)
-      const otherMember = conv.members.find((m: any) => m.userId !== conv.creatorId);
+      const otherMember = conv.members.find((m: any) => {
+        // Use currentUserId if available, otherwise fallback to creatorId comparison
+        if (currentUserId) {
+          return m.userId !== currentUserId;
+        }
+        // Fallback: find member that is not the creator
+        return conv.creatorId ? m.userId !== conv.creatorId : true;
+      });
       if (otherMember) {
         displayName = otherMember.userName || displayName;
         displayAvatar = otherMember.avatarUrl || displayAvatar;
       }
     }
 
+    // Format last message
+    let lastMessageText = 'Chưa có tin nhắn';
+    if (conv.lastMessage) {
+      // Nếu là tin nhắn của current user, thêm "Bạn: "
+      if (currentUserId && conv.lastMessageSenderId === currentUserId) {
+        lastMessageText = `Bạn: ${conv.lastMessage}`;
+      } else if (conv.lastMessageSenderName) {
+        // Hiển thị tên người gửi cho cả nhóm và chat riêng tư
+        lastMessageText = `${conv.lastMessageSenderName}: ${conv.lastMessage}`;
+      } else {
+        lastMessageText = conv.lastMessage;
+      }
+    }
+
     return {
       id: String(conv.id),
       name: displayName,
-      lastMessage: 'Tin nhắn mới nhất', // TODO: Get from last message
-      avatar: displayAvatar,
+      lastMessage: lastMessageText,
+      avatar: displayAvatar || customAvatar,
       phone: '', // Not available in backend response
       time: timeStr,
-      unread: false, // TODO: Calculate from unread count
+      unread: (conv.unreadCount || 0) > 0, // Sử dụng unreadCount từ backend
+      unreadCount: conv.unreadCount || 0, // Thêm unreadCount vào Conversation
       isGroup: isGroup,
       members: conv.members ? conv.members.map((m: any) => String(m.userId)) : [],
     };
   }) : [];
 
-  // Mock friend list for group creation UI (TODO: Replace with real API)
-  const [friends] = useState(() => [
-    { id: 'f1', name: 'Nguyễn Văn A', avatar: 'https://randomuser.me/api/portraits/men/32.jpg', phone: '0912345678' },
-    { id: 'f2', name: 'Trần Thị B', avatar: 'https://randomuser.me/api/portraits/women/44.jpg', phone: '0987654321' },
-    { id: 'f3', name: 'Lê C', avatar: 'https://randomuser.me/api/portraits/men/12.jpg', phone: '0900111222' },
-  ]);
+  // Friends list is now provided by useContacts() hook in the component
 
   // Groups are subset of chats flagged isGroup
   const groups = chats.filter(c => c.isGroup);
 
+  const markAsReadMutation = useMutation({
+    mutationFn: async (chatId: string) => {
+      const { markConversationAsRead } = await import('@/services/chat/chat.service');
+      return markConversationAsRead(chatId);
+    },
+    onSuccess: () => {
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: notificationKeys.unseenCount() });
+      queryClient.invalidateQueries({ queryKey: notificationKeys.list(10) });
+    },
+  });
+
   const markAsRead = (chatId: string) => {
-    // TODO: Implement mark as read API call
-    // For now, just update local state if needed
+    markAsReadMutation.mutate(chatId);
   };
 
   const markAllAsRead = () => {
@@ -148,18 +184,38 @@ export function useChats() {
 
   // Create group function that calls the API
   const createGroup = (name: string, memberIds: string[], avatar: string) => {
-    // Convert string IDs to numbers
-    const numericMemberIds = memberIds.map(id => parseInt(id.replace('f', ''), 10)).filter(id => !isNaN(id));
+    // Convert string IDs to numbers (userId from Contact interface)
+    const numericMemberIds = memberIds
+      .map(id => {
+        const numId = parseInt(id, 10);
+        return isNaN(numId) ? null : numId;
+      })
+      .filter((id): id is number => id !== null);
+    
+    if (numericMemberIds.length === 0) {
+      console.error('No valid member IDs provided');
+      return;
+    }
     
     createGroupMutation.mutate(
-      { title: name, memberIds: numericMemberIds, avatar },
+      { title: name, memberIds: numericMemberIds },
       {
         onSuccess: (response) => {
           // Query will automatically refetch after mutation
           queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+          Toast.show({
+            type: 'success',
+            text1: 'Thành công',
+            text2: 'Đã tạo nhóm thành công',
+          });
         },
-        onError: (error) => {
+        onError: (error: any) => {
           console.error('Failed to create group:', error);
+          Toast.show({
+            type: 'error',
+            text1: 'Lỗi',
+            text2: error?.message || 'Không thể tạo nhóm',
+          });
         },
       }
     );
@@ -172,7 +228,6 @@ export function useChats() {
     markAsRead, 
     markAllAsRead, 
     unreadCount, 
-    friends, 
     createGroup: createGroup as (name: string, memberIds: string[], avatar: string) => Conversation, 
     groups,
     isLoading,
@@ -191,21 +246,26 @@ export const useChat = (chatId: string) => {
       return response.data?.items;
     },
     enabled: !!chatId,
+    staleTime: 5 * 60 * 1000, // 5 minutes - chat details don't change often
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
+    refetchOnMount: false, // Don't refetch on mount if data exists
   });
 };
 
 // Get messages query
 export const useMessages = (chatId: string, page: number = 0, size: number = 20) => {
-  return useQuery({
+  return useQuery<PaginationResponse<MessageResponseDTO>, Error, MessageResponseDTO[]>({
     queryKey: chatKeys.messages(chatId),
+    enabled: !!chatId,
+    staleTime: 30 * 1000, // 30 seconds - messages are updated via WebSocket
+    retry: false,
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
+    refetchOnMount: false, // Don't refetch on mount if data exists (WebSocket handles updates)
     queryFn: async () => {
       const response = await getMessages(chatId, page, size);
-      // Backend returns APIResponse<Page<MessageResponse>>
-      // response.data.items is PageData<MessageResponse>
-      return response.data?.items?.content || [];
+      return response;
     },
-    enabled: !!chatId,
-    staleTime: 10 * 1000, // 10 seconds
+    select: (response) => response.data?.items?.content || [],
   });
 };
 

@@ -14,3 +14,6 @@ export * from './contacts/contacts.service';
 
 // Error Service
 export * from './error.service';
+
+// Notification Service
+export * from './notification/notification.service';

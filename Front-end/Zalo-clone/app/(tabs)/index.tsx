@@ -1,34 +1,19 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TextInput, Pressable, Animated, Modal, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TextInput, Pressable, Animated, Modal, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Animatable from 'react-native-animatable';
-import { useChats, Conversation } from '@/hooks'; // Đảm bảo đường dẫn đúng
+import { useChats, Conversation, useNotifications, NotificationViewModel } from '@/hooks'; // Đảm bảo đường dẫn đúng
+import { NotificationType } from '@/enums/notification.enum';
 import * as ImagePicker from 'expo-image-picker';
+import customAvatar from '@/utils/avatar';
+import { useContacts } from '@/hooks/contacts/useContacts';
+import { Contact } from '@/types/interfaces/contact.interface';
+import Toast from 'react-native-toast-message';
 
-// Thêm giao diện đơn giản cho Friend (dùng cho dữ liệu giả)
-interface Friend {
-  id: string;
-  name: string;
-  avatar: string;
-}
-
-// Bổ sung dữ liệu giả cho friends
-const DUMMY_FRIENDS: Friend[] = [
-  { id: 'f1', name: 'Nguyễn Văn A', avatar: 'https://i.pravatar.cc/150?img=1' },
-  { id: 'f2', name: 'Trần Thị B', avatar: 'https://i.pravatar.cc/150?img=2' },
-  { id: 'f3', name: 'Lê Văn C', avatar: 'https://i.pravatar.cc/150?img=3' },
-  { id: 'f4', name: 'Phạm Thị D', avatar: 'https://i.pravatar.cc/150?img=4' },
-  { id: 'f5', name: 'Hoàng Văn E', avatar: 'https://i.pravatar.cc/150?img=5' },
-  { id: 'f6', name: 'Đỗ Thị G', avatar: 'https://i.pravatar.cc/150?img=6' },
-  { id: 'f7', name: 'Võ Văn H', avatar: 'https://i.pravatar.cc/150?img=7' },
-  { id: 'f8', name: 'Cao Thị I', avatar: 'https://i.pravatar.cc/150?img=8' },
-  { id: 'f9', name: 'Bùi Văn K', avatar: 'https://i.pravatar.cc/150?img=9' },
-  { id: 'f10', name: 'Lý Thị L', avatar: 'https://i.pravatar.cc/150?img=10' },
-];
-
-const DEFAULT_GROUP_AVATAR = 'https://via.placeholder.com/150/028fe7/ffffff?text=Group';
+const DEFAULT_GROUP_AVATAR = customAvatar;
+const CUSTOM_AVATAR = customAvatar;
 
 export default function MessageScreen() {
   const router = useRouter();
@@ -41,7 +26,24 @@ export default function MessageScreen() {
 
   // hook cung cấp danh sách conversations + hành động markAsRead
   // Đảm bảo createGroup có kiểu đúng
-  const { chats, markAsRead, unreadCount, friends: actualFriends, createGroup } = useChats(); 
+  const { chats, markAsRead, createGroup } = useChats();
+  // Lấy danh sách bạn bè thật từ API
+  const { data: friends = [], isLoading: friendsLoading } = useContacts(); 
+  const {
+    notifications,
+    unseenCount: notificationUnseenCount,
+    isLoading: notificationsLoading,
+    isFetching: isFetchingNotifications,
+    isFetchingNextPage: isFetchingMoreNotifications,
+    hasNextPage: hasMoreNotifications,
+    fetchNextPage: fetchMoreNotifications,
+    markAllAsSeen,
+    isMarkingAllAsSeen,
+    deleteAll,
+    isDeletingAll,
+    refetch: refetchNotifications,
+  } = useNotifications();
+  const [markingSeen, setMarkingSeen] = useState(false);
 
   const filteredChats = chats.filter((item: Conversation) => {
     const matchesSearch =
@@ -66,6 +68,77 @@ export default function MessageScreen() {
     router.push({ pathname: '/chat', params: { chatId } });
   };
 
+  const handleOpenNotifications = () => {
+    refetchNotifications();
+    setShowNotification(true);
+  };
+
+  const handleMarkAllAsSeen = async () => {
+    try {
+      setMarkingSeen(true);
+      await markAllAsSeen();
+    } catch (error) {
+      console.error('Failed to mark notifications as seen', error);
+    } finally {
+      setMarkingSeen(false);
+    }
+  };
+
+  const handleDeleteAll = () => {
+    Alert.alert(
+      'Xóa tất cả thông báo',
+      'Bạn có chắc chắn muốn xóa tất cả thông báo? Hành động này không thể hoàn tác.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAll();
+              Alert.alert('Thành công', 'Đã xóa tất cả thông báo.');
+            } catch (error) {
+              Alert.alert('Lỗi', 'Không thể xóa thông báo.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleNotificationPress = (notification: NotificationViewModel) => {
+    if (!notification.referenceId) return;
+
+    // Đóng modal trước
+    setShowNotification(false);
+
+    // Đợi một chút để modal đóng hoàn toàn trước khi điều hướng
+    setTimeout(() => {
+      // Điều hướng dựa trên type
+      switch (notification.type) {
+        case NotificationType.NEW_MESSAGE:
+          // referenceId là conversationId
+          router.push({ pathname: '/chat', params: { chatId: notification.referenceId } });
+          break;
+        case NotificationType.NEW_POST:
+        case NotificationType.POST_REACTION:
+        case NotificationType.NEW_COMMENT:
+        case NotificationType.COMMENT_REPLY:
+          // referenceId là postId, điều hướng đến wall tab
+          router.push('/(tabs)/wall');
+          break;
+        case NotificationType.FRIEND_REQUEST_RECEIVED:
+        case NotificationType.FRIEND_REQUEST_ACCEPTED:
+          // Điều hướng đến tab contacts
+          router.push('/(tabs)/contacts');
+          break;
+        default:
+          // Không điều hướng cho các type khác
+          break;
+      }
+    }, 300); // Đợi 300ms để modal đóng
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top","left","right"]}>
       <View style={styles.container}>
@@ -77,11 +150,11 @@ export default function MessageScreen() {
               <Pressable style={{ marginRight: 10 }}>
                 <Feather name="grid" size={22} color="#fff" />
               </Pressable>
-              <Pressable style={{ marginRight: 10 }} onPress={() => setShowNotification(true)}>
+              <Pressable style={{ marginRight: 10 }} onPress={handleOpenNotifications}>
                 <Ionicons name="notifications-outline" size={22} color="#fff" />
-                {unreadCount > 0 && (
+                {notificationUnseenCount > 0 && (
                   <View style={styles.redDotHeader}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{unreadCount}</Text>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{notificationUnseenCount}</Text>
                   </View>
                 )}
               </Pressable>
@@ -133,7 +206,10 @@ export default function MessageScreen() {
                 ]}
                 onPress={() => onOpenChat(item.id)}
               >
-                <Image source={{ uri: item.avatar }} style={styles.avatar} />
+                <Image 
+                  source={item.avatar && typeof item.avatar === 'string' ? { uri: item.avatar } : (typeof item.avatar === 'object' ? item.avatar : CUSTOM_AVATAR)} 
+                  style={styles.avatar} 
+                />
                 <View style={styles.chatInfo}>
                   <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between' }}>
                     <Text style={[styles.userName, item.unread && { fontWeight: '800' }]}>{item.name}</Text>
@@ -143,7 +219,13 @@ export default function MessageScreen() {
                     <Text style={[styles.lastMessage, item.unread && { color: '#0a0a0a', fontWeight:'600' }]} numberOfLines={1}>
                       {item.lastMessage}
                     </Text>
-                    {item.unread && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>Mới</Text></View>}
+                    {item.unreadCount && item.unreadCount > 0 && (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadBadgeText}>
+                          {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </Pressable>
@@ -158,23 +240,51 @@ export default function MessageScreen() {
       <CreateGroupModal
         visible={showCreateGroup}
         onClose={() => setShowCreateGroup(false)}
-        friends={DUMMY_FRIENDS} // Sử dụng DUMMY_FRIENDS cho hiển thị
+        friends={friends}
+        isLoading={friendsLoading}
         onCreate={(name, memberIds, avatar) => {
           // Gọi createGroup từ hook đã được cập nhật
           if (createGroup) {
-            createGroup(name, memberIds, avatar); 
-          } else {
-            console.log("Creating group:", name, memberIds, avatar);
+            createGroup(name, memberIds, avatar);
+            // Note: Success/Error handling is done in the mutation callbacks
+            // Modal will close after calling createGroup
+            setShowCreateGroup(false);
           }
-          setShowCreateGroup(false);
         }}
       />
-      <NotificationModal visible={showNotification} onClose={() => setShowNotification(false)} />
+      <NotificationModal
+        visible={showNotification}
+        notifications={notifications}
+        isLoading={notificationsLoading}
+        isFetching={isFetchingNotifications}
+        isFetchingMore={isFetchingMoreNotifications}
+        hasMore={hasMoreNotifications}
+        onLoadMore={fetchMoreNotifications}
+        onRefresh={refetchNotifications}
+        onClose={() => setShowNotification(false)}
+        onMarkAllAsSeen={handleMarkAllAsSeen}
+        isMarkingAll={isMarkingAllAsSeen || markingSeen}
+        onDeleteAll={handleDeleteAll}
+        isDeletingAll={isDeletingAll}
+        onNotificationPress={handleNotificationPress}
+      />
     </SafeAreaView>
   );
 }
 
-function CreateGroupModal({ visible, onClose, friends, onCreate }: { visible: boolean; onClose: () => void; friends: Friend[]; onCreate: (name: string, memberIds: string[], avatar: string) => void }) {
+function CreateGroupModal({ 
+  visible, 
+  onClose, 
+  friends, 
+  isLoading,
+  onCreate 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  friends: Contact[]; 
+  isLoading?: boolean;
+  onCreate: (name: string, memberIds: string[], avatar: string) => void;
+}) {
   const [selected, setSelected] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   const [search, setSearch] = useState('');
@@ -195,7 +305,8 @@ function CreateGroupModal({ visible, onClose, friends, onCreate }: { visible: bo
   
   // Lọc bạn bè theo search
   const filteredFriends = friends.filter(friend => 
-    friend.name.toLowerCase().includes(search.toLowerCase())
+    friend.friendName.toLowerCase().includes(search.toLowerCase()) ||
+    friend.username.toLowerCase().includes(search.toLowerCase())
   );
 
   // HÀM CHỌN ẢNH TỪ THƯ VIỆN
@@ -229,7 +340,10 @@ function CreateGroupModal({ visible, onClose, friends, onCreate }: { visible: bo
           {/* Avatar và Tên nhóm */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <Pressable onPress={pickImage} style={{ marginRight: 12 }}>
-              <Image source={{ uri: groupAvatar }} style={styles.groupAvatarPreview} />
+              <Image 
+                source={typeof groupAvatar === 'string' ? { uri: groupAvatar } : groupAvatar} 
+                style={styles.groupAvatarPreview} 
+              />
               <View style={styles.cameraIconBadge}><Feather name="camera" size={12} color="#fff" /></View>
             </Pressable>
             <TextInput 
@@ -256,25 +370,42 @@ function CreateGroupModal({ visible, onClose, friends, onCreate }: { visible: bo
           <Text style={{ marginBottom: 6, color: '#6b7780', fontSize: 13 }}>Chọn thành viên ({selected.length}/{friends.length})</Text>
           
           {/* Danh sách bạn bè có scroll bar và max height */}
-          <FlatList
-            data={filteredFriends}
-            keyExtractor={(i) => i.id}
-            style={styles.friendsList}
-            showsVerticalScrollIndicator={true}
-            renderItem={({ item }) => (
-              <Pressable onPress={() => toggle(item.id)} style={({ pressed }) => [styles.friendItem, pressed && { opacity: 0.8 }] }>
-                <Image source={{ uri: item.avatar }} style={styles.friendAvatar} />
-                <Text style={styles.friendName}>{item.name}</Text>
-                {/* Custom Checkbox */}
-                <View style={[styles.customCheckbox, selected.includes(item.id) && styles.customCheckboxSelected]}>
-                  {selected.includes(item.id) && <Ionicons name="checkmark-sharp" size={14} color="#fff" />}
-                </View>
-              </Pressable>
-            )}
-            ListEmptyComponent={() => (
-              <Text style={{ textAlign: 'center', color: '#999', padding: 10 }}>Không tìm thấy bạn bè nào.</Text>
-            )}
-          />
+          {isLoading ? (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#2994f2" />
+              <Text style={{ marginTop: 10, color: '#666', fontSize: 14 }}>Đang tải danh sách bạn bè...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredFriends}
+              keyExtractor={(item) => item.id}
+              style={styles.friendsList}
+              showsVerticalScrollIndicator={true}
+              renderItem={({ item }) => (
+                <Pressable onPress={() => toggle(item.userId || item.id)} style={({ pressed }) => [styles.friendItem, pressed && { opacity: 0.8 }] }>
+                  <Image 
+                    source={item.avatarUrl ? { uri: item.avatarUrl } : CUSTOM_AVATAR} 
+                    style={styles.friendAvatar} 
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.friendName}>{item.friendName}</Text>
+                    {item.username && (
+                      <Text style={{ fontSize: 12, color: '#999', marginTop: 2 }}>@{item.username}</Text>
+                    )}
+                  </View>
+                  {/* Custom Checkbox */}
+                  <View style={[styles.customCheckbox, selected.includes(item.userId || item.id) && styles.customCheckboxSelected]}>
+                    {selected.includes(item.userId || item.id) && <Ionicons name="checkmark-sharp" size={14} color="#fff" />}
+                  </View>
+                </Pressable>
+              )}
+              ListEmptyComponent={() => (
+                <Text style={{ textAlign: 'center', color: '#999', padding: 10 }}>
+                  {friends.length === 0 ? 'Bạn chưa có bạn bè nào.' : 'Không tìm thấy bạn bè nào.'}
+                </Text>
+              )}
+            />
+          )}
           
           {/* Nút Tạo nhóm */}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 15 }}>
@@ -303,31 +434,133 @@ function CreateGroupModal({ visible, onClose, friends, onCreate }: { visible: bo
   );
 }
 
-/* Restored Notification Modal (modernized) */
-function NotificationModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const notifications = [
-    { id: 'n1', title: 'Bạn có lời mời kết bạn mới', time: '1h' },
-    { id: 'n2', title: 'Hệ thống: Bảo trì vào 00:00', time: '2d' },
-    { id: 'n3', title: 'Tài khoản của bạn đã được xác minh', time: '2h' },
-  ];
+/* Notification Modal with real data */
+function NotificationModal({
+  visible,
+  onClose,
+  notifications,
+  isLoading,
+  isFetching,
+  isFetchingMore,
+  hasMore,
+  onLoadMore,
+  onRefresh,
+  onMarkAllAsSeen,
+  isMarkingAll,
+  onDeleteAll,
+  isDeletingAll,
+  onNotificationPress,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  notifications: NotificationViewModel[];
+  isLoading: boolean;
+  isFetching: boolean;
+  isFetchingMore: boolean;
+  hasMore: boolean;
+  onLoadMore?: () => void;
+  onRefresh?: () => Promise<any>;
+  onMarkAllAsSeen: () => Promise<void>;
+  isMarkingAll: boolean;
+  onDeleteAll: () => void;
+  isDeletingAll: boolean;
+  onNotificationPress?: (notification: NotificationViewModel) => void;
+}) {
+  const handleEndReached = () => {
+    if (hasMore && !isFetchingMore) {
+      onLoadMore?.();
+    }
+  };
+
+  const handleRefresh = () => {
+    onRefresh?.();
+  };
+
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPressOut={onClose}>
-        <View style={[styles.modalBox, { maxHeight: 360 }] }>
+        <View style={[styles.modalBox, { maxHeight: 360 }]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontWeight:'700', marginBottom:8, fontSize:16 }}>Thông báo</Text>
-            <Pressable onPress={onClose}><Text style={{ color: '#2994f2' }}>Đóng</Text></Pressable>
+            <Text style={{ fontWeight: '700', marginBottom: 8, fontSize: 16 }}>Thông báo</Text>
+            <View style={styles.notificationHeaderActions}>
+              <Pressable
+                style={[styles.modalBtn, { marginLeft: 0 }]}
+                onPress={onMarkAllAsSeen}
+                disabled={isMarkingAll || notifications.length === 0}
+              >
+                <Text
+                  style={[
+                    styles.modalActionText,
+                    (isMarkingAll || notifications.length === 0) && styles.modalActionDisabled,
+                  ]}
+                >
+                  {isMarkingAll ? 'Đang xử lý...' : 'Đánh dấu đã đọc'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn]}
+                onPress={onDeleteAll}
+                disabled={isDeletingAll || notifications.length === 0}
+              >
+                <Text
+                  style={[
+                    styles.modalActionText,
+                    { color: '#ff4444' },
+                    (isDeletingAll || notifications.length === 0) && styles.modalActionDisabled,
+                  ]}
+                >
+                  {isDeletingAll ? 'Đang xóa...' : 'Xóa tất cả'}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.modalBtn} onPress={onClose}>
+                <Text style={styles.modalActionText}>Đóng</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={{ height: 8 }} />
-          {notifications.map(n => (
-            <View key={n.id} style={[styles.nItem, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }] }>
-              <View>
-                <Text style={{ fontWeight:'600' }}>{n.title}</Text>
-                <Text style={{ color:'#666', fontSize:12 }}>{n.time}</Text>
-              </View>
-              <Pressable style={{ padding:6 }}><Text style={{ color: '#2994f2' }}>Xem</Text></Pressable>
+          {isLoading && notifications.length === 0 ? (
+            <View style={styles.notificationLoading}>
+              <ActivityIndicator color="#2994f2" />
             </View>
-          ))}
+          ) : (
+            <FlatList
+              data={notifications}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <Pressable 
+                  style={styles.notificationItem}
+                  onPress={() => onNotificationPress?.(item)}
+                >
+                  {item.actorAvatar ? (
+                    <Image source={{ uri: item.actorAvatar }} style={styles.notificationAvatar} />
+                  ) : (
+                    <Image source={CUSTOM_AVATAR} style={styles.notificationAvatar} />
+                  )}
+                  <View style={styles.notificationContent}>
+                    <Text style={styles.notificationTitle}>{item.message}</Text>
+                    <Text style={styles.notificationTime}>{item.relativeTime}</Text>
+                  </View>
+                </Pressable>
+              )}
+              ListEmptyComponent={() => (
+                <View style={styles.notificationEmpty}>
+                  <Text style={{ color: '#666' }}>Bạn chưa có thông báo nào.</Text>
+                </View>
+              )}
+              ListFooterComponent={() =>
+                isFetchingMore ? (
+                  <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                    <ActivityIndicator color="#2994f2" size="small" />
+                  </View>
+                ) : null
+              }
+              refreshing={isFetching && notifications.length > 0}
+              onRefresh={handleRefresh}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.2}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            />
+          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -394,9 +627,6 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 16 },
   modalBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, elevation: 5 },
-  nItem: { paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' },
-  modalClose: { marginTop: 10, alignSelf: 'flex-end' }
-  ,
   /* merged header/search */
   headerMerged: { backgroundColor: '#028fe7', paddingHorizontal: 12, paddingBottom: 10, paddingTop: 8, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
   headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -410,6 +640,32 @@ const styles = StyleSheet.create({
   modalPrimaryBtn: { paddingHorizontal: 12, paddingVertical: 8, marginLeft: 8, backgroundColor: '#2994f2', borderRadius: 8 },
   modalPrimaryBtnDisabled: { backgroundColor: '#aedaff' }, // Style cho nút bị disable
   modalBtnText: { color: '#2994f2', fontWeight: '600' },
+  notificationHeaderActions: { flexDirection: 'row', alignItems: 'center' },
+  modalActionText: { color: '#2994f2', fontWeight: '600' },
+  modalActionDisabled: { color: '#9ac7f7' },
+  notificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  notificationAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e4f2fc',
+  },
+  notificationAvatarFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2994f2',
+  },
+  notificationContent: { flex: 1, marginLeft: 12 },
+  notificationTitle: { fontWeight: '600', color: '#1b1b1b', fontSize: 14 },
+  notificationTime: { color: '#666', fontSize: 12, marginTop: 4 },
+  notificationEmpty: { paddingVertical: 16, alignItems: 'center' },
+  notificationLoading: { paddingVertical: 24, alignItems: 'center' },
   
   // Create Group Modal specific styles
   groupAvatarPreview: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#e9e9e9' },

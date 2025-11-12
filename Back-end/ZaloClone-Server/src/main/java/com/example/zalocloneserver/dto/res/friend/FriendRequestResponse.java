@@ -12,6 +12,7 @@ public class FriendRequestResponse {
     private Long id;
     private Long fromUserId;
     private String fromUsername;
+    private String fromDisplayName;
     private String fromAvatar;
     private String message;
     private LocalDateTime createdAt;

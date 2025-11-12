@@ -7,7 +7,7 @@
 import {
     Chat,
     CreateChatRequest,
-    Message,
+    MessageResponseDTO,
     SendMessageRequest,
 } from '@/types/interfaces/chat.interface';
 import { axiosInstance } from '@/utils/axios-instance';
@@ -29,7 +29,7 @@ export const getMessages = async (
   conversationId: string,
   page: number = 0,
   size: number = 20
-): Promise<PaginationResponse<Message>> => {
+): Promise<PaginationResponse<MessageResponseDTO>> => {
   try {
     const res = await axiosInstance.get(`/conversations/${conversationId}/messages`, {
       params: { page, size, sort: 'createdAt,desc' },
@@ -95,6 +95,16 @@ export const sendMessage = async (
   // Messages should be sent via WebSocket using StompProvider
   // See providers/StompProvider.tsx for sendMessage function
   throw new Error('sendMessage should use WebSocket, not REST API');
+};
+
+// Mark conversation as read
+export const markConversationAsRead = async (conversationId: string): Promise<SingleResponse<any>> => {
+  try {
+    const res = await axiosInstance.post(`/conversations/${conversationId}/mark-as-read`);
+    return res.data;
+  } catch (error) {
+    throw handleAxiosError(error);
+  }
 };
 
 // Backend doesn't have delete conversation endpoint

@@ -18,6 +18,7 @@ TRUNCATE TABLE postmedia;
 TRUNCATE TABLE friend_requests;
 TRUNCATE TABLE friends;
 TRUNCATE TABLE conversations;
+TRUNCATE TABLE in_app_notifications;
 TRUNCATE TABLE post;
 TRUNCATE TABLE user_profiles;
 TRUNCATE TABLE users;
@@ -44,16 +45,16 @@ ON DUPLICATE KEY UPDATE email = VALUES(email);
 -- 2. USER_PROFILES (Đã có 10 bản ghi)
 -- =====================================================
 INSERT INTO user_profiles (id, userId, avatarUrl, displayName, birthday, gender, location, lastActive, presence) VALUES
-                                                                                                                     (1, 1, 'https://avatar.zalo.vn/admin.jpg', 'Admin Zalo', '1990-01-01', 'MALE', 'Hà Nội', '2025-11-11 08:41:00', 'ONLINE'),
-                                                                                                                     (2, 2, 'https://avatar.zalo.vn/an.jpg', 'An Trần', '1998-05-15', 'FEMALE', 'TP.HCM', '2025-11-11 08:40:00', 'ONLINE'),
-                                                                                                                     (3, 3, 'https://avatar.zalo.vn/binh.jpg', 'Bình Nguyễn', '1997-08-20', 'MALE', 'Đà Nẵng', '2025-11-11 08:39:00', 'OFFLINE'),
-                                                                                                                     (4, 4, 'https://avatar.zalo.vn/chi.jpg', 'Chi Phạm', '1999-03-10', 'FEMALE', 'Hà Nội', '2025-11-11 08:38:00', 'ONLINE'),
-                                                                                                                     (5, 5, 'https://avatar.zalo.vn/dung.jpg', 'Dũng Hồ', '1996-12-25', 'MALE', 'Cần Thơ', '2025-11-11 08:37:00', 'AWAY'),
-                                                                                                                     (6, 6, 'https://avatar.zalo.vn/emily.jpg', 'Emily Võ', '2000-07-07', 'FEMALE', 'Hải Phòng', '2025-11-11 08:36:00', 'ONLINE'),
-                                                                                                                     (7, 7, 'https://avatar.zalo.vn/frank.jpg', 'Frank Lê', '1995-11-11', 'MALE', 'Nha Trang', '2025-11-11 08:35:00', 'OFFLINE'),
-                                                                                                                     (8, 8, 'https://avatar.zalo.vn/grace.jpg', 'Grace Ngô', '1998-09-09', 'FEMALE', 'Huế', '2025-11-11 08:34:00', 'ONLINE'),
-                                                                                                                     (9, 9, 'https://avatar.zalo.vn/huy.jpg', 'Huy Trương', '1994-04-04', 'MALE', 'Vũng Tàu', '2025-11-11 08:33:00', 'AWAY'),
-                                                                                                                     (10, 10, 'https://avatar.zalo.vn/iris.jpg', 'Iris Đỗ', '1999-06-30', 'FEMALE', 'Biên Hòa', '2025-11-11 08:32:00', 'ONLINE')
+                                                                                                                     (1, 1, 'https://i.pravatar.cc/150?img=1', 'Admin Zalo', '1990-01-01', 'MALE', 'Hà Nội', '2025-11-11 08:41:00', 'ONLINE'),
+                                                                                                                     (2, 2, 'https://i.pravatar.cc/150?img=2', 'An Trần', '1998-05-15', 'FEMALE', 'TP.HCM', '2025-11-11 08:40:00', 'ONLINE'),
+                                                                                                                     (3, 3, 'https://i.pravatar.cc/150?img=3', 'Bình Nguyễn', '1997-08-20', 'MALE', 'Đà Nẵng', '2025-11-11 08:39:00', 'OFFLINE'),
+                                                                                                                     (4, 4, 'https://i.pravatar.cc/150?img=4', 'Chi Phạm', '1999-03-10', 'FEMALE', 'Hà Nội', '2025-11-11 08:38:00', 'ONLINE'),
+                                                                                                                     (5, 5, 'https://i.pravatar.cc/150?img=5', 'Dũng Hồ', '1996-12-25', 'MALE', 'Cần Thơ', '2025-11-11 08:37:00', 'AWAY'),
+                                                                                                                     (6, 6, 'https://i.pravatar.cc/150?img=6', 'Emily Võ', '2000-07-07', 'FEMALE', 'Hải Phòng', '2025-11-11 08:36:00', 'ONLINE'),
+                                                                                                                     (7, 7, 'https://i.pravatar.cc/150?img=7', 'Frank Lê', '1995-11-11', 'MALE', 'Nha Trang', '2025-11-11 08:35:00', 'OFFLINE'),
+                                                                                                                     (8, 8, 'https://i.pravatar.cc/150?img=8', 'Grace Ngô', '1998-09-09', 'FEMALE', 'Huế', '2025-11-11 08:34:00', 'ONLINE'),
+                                                                                                                     (9, 9, 'https://i.pravatar.cc/150?img=9', 'Huy Trương', '1994-04-04', 'MALE', 'Vũng Tàu', '2025-11-11 08:33:00', 'AWAY'),
+                                                                                                                     (10, 10, 'https://i.pravatar.cc/150?img=10', 'Iris Đỗ', '1999-06-30', 'FEMALE', 'Biên Hòa', '2025-11-11 08:32:00', 'ONLINE')
 ON DUPLICATE KEY UPDATE displayName = VALUES(displayName);
 
 -- =====================================================
@@ -76,16 +77,26 @@ ON DUPLICATE KEY UPDATE content = VALUES(content);
 -- 4. postmedia (Tăng cường lên 10 bản ghi)
 -- =====================================================
 INSERT INTO postmedia (id, url, type, post_id) VALUES
-                                                   (1, 'https://media.zalo/post1_1.jpg', 'IMAGE', 1),
-                                                   (2, 'https://media.zalo/post2_1.mp4', 'VIDEO', 2),
-                                                   (3, 'https://media.zalo/post3_1.jpg', 'IMAGE', 3),
-                                                   (4, 'https://media.zalo/post4_1.jpg', 'IMAGE', 4), -- Thêm media cho post 4
-                                                   (5, 'https://media.zalo/post5_1.jpg', 'IMAGE', 5),
-                                                   (6, 'https://media.zalo/post6_1.jpg', 'IMAGE', 6),
-                                                   (7, 'https://media.zalo/post7_1.jpg', 'IMAGE', 7), -- Thêm media cho post 7
-                                                   (8, 'https://media.zalo/post8_1.mp4', 'VIDEO', 8), -- Thêm media cho post 8
-                                                   (9, 'https://media.zalo/post9_1.jpg', 'IMAGE', 9), -- Thêm media cho post 9
-                                                   (10, 'https://media.zalo/post10_1.jpg', 'IMAGE', 10) -- Thêm media cho post 10
+                                                   (1, 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80', 'IMAGE', 1),
+                                                   (2, 'https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&q=80', 'VIDEO', 2),
+                                                   (3, 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?w=800&q=80', 'IMAGE', 3),
+                                                   (4, 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=80', 'IMAGE', 4),
+                                                   (5, 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80', 'IMAGE', 5),
+                                                   (6, 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80', 'IMAGE', 6),
+                                                   (7, 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800&q=80', 'IMAGE', 7),
+                                                   (8, 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800&q=80', 'VIDEO', 8),
+                                                   (9, 'https://images.unsplash.com/photo-1511497584788-876760111969?w=800&q=80', 'IMAGE', 9),
+                                                   (10, 'https://images.unsplash.com/photo-1522770179533-24471fcdba45?w=800&q=80', 'IMAGE', 10),
+                                                   (11, 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80', 'IMAGE', 1),
+                                                   (12, 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=800&q=80', 'IMAGE', 2),
+                                                   (13, 'https://images.unsplash.com/photo-1510784722466-f2aa9c52fff6?w=800&q=80', 'IMAGE', 3),
+                                                   (14, 'https://picsum.photos/800/600?random=1', 'IMAGE', 4),
+                                                   (15, 'https://picsum.photos/800/600?random=2', 'IMAGE', 5),
+                                                   (16, 'https://picsum.photos/800/600?random=3', 'IMAGE', 6),
+                                                   (17, 'https://picsum.photos/800/600?random=4', 'IMAGE', 7),
+                                                   (18, 'https://picsum.photos/800/600?random=5', 'IMAGE', 8),
+                                                   (19, 'https://picsum.photos/800/600?random=6', 'IMAGE', 9),
+                                                   (20, 'https://picsum.photos/800/600?random=7', 'IMAGE', 10)
 ON DUPLICATE KEY UPDATE url = VALUES(url);
 
 -- =====================================================
@@ -142,8 +153,8 @@ ON DUPLICATE KEY UPDATE createdAt = VALUES(createdAt);
 INSERT INTO conversations (id, type, title, avatarUrl, createdBy, createdAt, lastMessageAt, isPublic) VALUES
                                                                                                           (1, 'PRIVATE', NULL, NULL, 2, '2025-11-01 09:00:00', '2025-11-11 08:05:00', FALSE), -- An(2) - Bình(3)
                                                                                                           (2, 'PRIVATE', NULL, NULL, 4, '2025-11-02 10:00:00', '2025-11-11 07:45:00', FALSE), -- Chi(4) - Dũng(5)
-                                                                                                          (3, 'GROUP', 'Nhóm bạn thân', 'https://avatar.zalo.vn/group1.jpg', 4, '2025-11-03 11:00:00', '2025-11-11 08:41:00', TRUE), -- Group 1
-                                                                                                          (4, 'GROUP', 'Dự án ABC', 'https://avatar.zalo.vn/group2.jpg', 1, '2025-11-04 12:00:00', '2025-11-11 08:20:00', FALSE) -- Group 2
+                                                                                                          (3, 'GROUP', 'Nhóm bạn thân', 'https://i.pravatar.cc/150?img=11', 4, '2025-11-03 11:00:00', '2025-11-11 08:41:00', TRUE), -- Group 1
+                                                                                                          (4, 'GROUP', 'Dự án ABC', 'https://i.pravatar.cc/150?img=12', 1, '2025-11-04 12:00:00', '2025-11-11 08:20:00', FALSE) -- Group 2
 ON DUPLICATE KEY UPDATE title = VALUES(title);
 
 -- =====================================================
@@ -314,3 +325,30 @@ INSERT INTO friend_requests (id, fromUserId, toUserId, message, createdAt) VALUE
                                                                                (9, 2, 7, 'An muốn kết bạn với Frank', '2025-11-08 15:00:00'),
                                                                                (10, 3, 8, 'Bình muốn làm quen với Grace', '2025-11-09 17:30:00')
 ON DUPLICATE KEY UPDATE message = VALUES(message);
+
+-- =====================================================
+-- 16. IN-APP NOTIFICATIONS (Thêm dữ liệu mẫu phục vụ frontend)
+-- =====================================================
+-- Lưu ý: cột userId trỏ tới bảng users.id; type theo enum NotificationType
+INSERT INTO in_app_notifications (id, userId, type, referenceId, payload, seen, createdAt) VALUES
+  -- An (2) nhận lời mời kết bạn từ Huy (9)
+  (1, 2, 'FRIEND_REQUEST_RECEIVED', '1', 'Huy Trương đã gửi cho bạn một lời mời kết bạn.', FALSE, '2025-11-08 09:10:00'),
+  -- Bình (3) nhận thông báo bài viết mới của Chi (4)
+  (2, 3, 'NEW_POST', '3', 'Chi Phạm vừa đăng một bài viết mới.', FALSE, '2025-11-09 08:00:00'),
+  -- Chi (4) nhận tin nhắn mới trong hội thoại 2 từ Dũng (5)
+  (3, 4, 'NEW_MESSAGE', '15', 'Dũng Hồ đã gửi một tin nhắn mới.', TRUE, '2025-11-10 14:00:30'),
+  -- Dũng (5) được chấp nhận lời mời từ Admin (1)
+  (4, 5, 'FRIEND_REQUEST_ACCEPTED', '3', 'Admin Zalo đã chấp nhận lời mời kết bạn của bạn.', FALSE, '2025-11-10 20:00:00'),
+  -- Emily (6) nhận thông báo hệ thống
+  (5, 6, 'SYSTEM', NULL, 'Hệ thống sẽ bảo trì vào 00:00 hôm nay.', TRUE, '2025-11-10 21:30:00'),
+  -- Frank (7) nhận bài viết mới từ Grace (8)
+  (6, 7, 'NEW_POST', '8', 'Grace Ngô vừa đăng một bài viết mới.', FALSE, '2025-11-11 07:10:00'),
+  -- Grace (8) nhận tin nhắn mới trong nhóm 4 từ Admin (1)
+  (7, 8, 'NEW_MESSAGE', '47', 'Admin Zalo đã gửi một tin nhắn mới.', FALSE, '2025-11-11 08:10:10'),
+  -- Huy (9) nhận phản hồi kết bạn bị từ chối từ Chi (4) (minh họa SYSTEM)
+  (8, 9, 'SYSTEM', '7', 'Chi Phạm đã từ chối lời mời kết bạn của bạn.', TRUE, '2025-11-11 08:20:00'),
+  -- Iris (10) nhận lời mời kết bạn từ Dũng (5)
+  (9, 10, 'FRIEND_REQUEST_RECEIVED', '8', 'Dũng Hồ đã gửi cho bạn một lời mời kết bạn.', FALSE, '2025-11-11 08:25:00'),
+  -- An (2) nhận tin nhắn mới từ Bình (3) trong hội thoại 1
+  (10, 2, 'NEW_MESSAGE', '46', 'Bình Nguyễn đã gửi một tin nhắn mới.', FALSE, '2025-11-11 08:05:05')
+ON DUPLICATE KEY UPDATE payload = VALUES(payload), seen = VALUES(seen), createdAt = VALUES(createdAt);

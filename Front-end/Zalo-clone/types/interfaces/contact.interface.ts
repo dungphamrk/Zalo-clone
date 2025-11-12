@@ -1,12 +1,16 @@
 
+export type ContactStatus = 'FRIEND' | 'PENDING' | 'NEW';
+
 export interface Contact {
   id: string;
+  userId: string;
   friendName: string;
   username: string;
   email?: string;
   avatarUrl?: string;
-  userId: string; // ID của người dùng sở hữu liên hệ này
-  friend: boolean; // <-- MỚI: Trạng thái bạn bè
+  friend: boolean;
+  status?: ContactStatus;
+  since?: string;
 }
 
 export interface CreateContactRequest {
@@ -24,14 +28,13 @@ export interface UpdateContactRequest {
 }
 
 export interface FriendRequestDTO {
-    toUserId: string;
-    
-    message?: string; 
+    toUserId: number;
 }
 export interface FriendRequestIncoming {
     id: number; 
     fromUserId: number; 
     fromUsername: string; 
+    fromDisplayName?: string; 
     fromAvatar: string; 
     message: string; 
     createdAt: string; 
@@ -48,6 +51,7 @@ export interface FriendRequestSent {
     fromUserId: number; 
 
     toUsername: string; // Tên người dùng/SĐT người nhận
+    toDisplayName?: string; // Tên hiển thị người nhận
     toAvatar: string; // URL avatar người nhận
 }
 export type FriendRequestResponse = FriendRequestIncoming | FriendRequestSent;

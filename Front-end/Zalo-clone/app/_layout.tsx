@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { ReduxProvider } from '@/providers/ReduxProvider';
+import { StompProvider } from '@/providers/StompProvider';
 import Toast from 'react-native-toast-message';
 
 export const unstable_settings = {
@@ -18,15 +19,16 @@ export default function RootLayout() {
   return (
     <ReduxProvider>
       <QueryProvider>
-        {/* SocketProvider needs to be inside QueryProvider so it can use the queryClient */}
+        <StompProvider>
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
+            <Stack>
+              <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </StompProvider>
         <Toast />
       </QueryProvider>
     </ReduxProvider>

@@ -12,6 +12,8 @@ public interface IConversationMemberRepository extends JpaRepository<Conversatio
 
     // Kiểm tra xem user đã là thành viên của conversation chưa
     boolean existsByConversationAndUser(Conversation conversation, User user);
+
+    boolean existsByConversation_IdAndUser_Id(Long conversationId, Long userId);
     
     // Lấy tất cả conversations mà user là thành viên
     List<ConversationMember> findByUser(User user);

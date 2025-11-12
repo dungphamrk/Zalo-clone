@@ -16,8 +16,8 @@ import {
     
     // Đã loại bỏ acceptFriendRequest và rejectFriendRequest khỏi import
 } from '@/services/contacts/contacts.service'; 
-import { Contact, CreateContactRequest, UpdateContactRequest, FriendRequestDTO, FriendRequestIncoming, FriendRequestSent } from '@/types/interfaces/contact.interface';
-import { ListResponse, SingleResponse, Items, PaginationResponse } from '@/utils/response-data'; 
+import { Contact, ContactStatus, CreateContactRequest, UpdateContactRequest, FriendRequestDTO, FriendRequestIncoming, FriendRequestSent } from '@/types/interfaces/contact.interface';
+import { ListResponse, SingleResponse, PaginationResponse } from '@/utils/response-data'; 
 import Toast from 'react-native-toast-message'; 
 import { router } from 'expo-router';
 
@@ -36,16 +36,24 @@ export const contactKeys = {
 
 export const useContacts = () => {
   
-    return useQuery<PaginationResponse<Contact>, Error, Contact[]>({
+    return useQuery<PaginationResponse<any>, Error, Contact[]>({
         queryKey: contactKeys.lists(),
         queryFn: async () => {
             
             return await getContacts();
         },
         select: (response) => {
-        // Backend returns APIResponse<Page<FriendResponse>>
-        // response.data is DataResponse<PageData<FriendResponse>> | null
-        return response.data?.items?.content || [];
+        const items = response.data?.items?.content || [];
+        return items.map((friend: any) => ({
+            id: String(friend.friendId),
+            userId: String(friend.friendId),
+            friendName: friend.friendName || friend.username || 'Người dùng',
+            username: friend.username || '',
+            avatarUrl: friend.avatarUrl || undefined,
+            friend: friend.isFriend ?? true,
+            status: (friend.isFriend ? 'FRIEND' : 'NEW') as ContactStatus,
+            since: friend.since || undefined,
+        }));
         },
         staleTime: 60 * 1000, 
     });
@@ -71,15 +79,22 @@ export const useContact = (contactId: string) => {
 export const useSearchContacts = (search: string) => {
     const isEnabled = !!(search && search.trim().length > 0); 
     
-    return useQuery<ListResponse<Contact>, Error, Contact[]>({
+    return useQuery<ListResponse<any>, Error, Contact[]>({
         queryKey: contactKeys.listSearch(search),
         queryFn: async () => {
             return await searchContacts(search);
         },
         select: (response) => {
-        // Backend returns APIResponse<List<UserSearchResponse>>
-        // response.data is DataResponse<UserSearchResponse[]> | null
-        return response.data?.items || [];
+        const items = response.data?.items || [];
+        return items.map((user: any) => ({
+            id: String(user.id),
+            userId: String(user.id),
+            friendName: user.displayName || user.username || 'Người dùng',
+            username: user.username || '',
+            avatarUrl: user.avatarUrl || undefined,
+            friend: user.status === 'FRIEND',
+            status: user.status as ContactStatus,
+        }));
         },
         enabled: isEnabled, 
         staleTime: 1 * 60 * 1000, 
@@ -236,7 +251,7 @@ export const useDeleteContactMutation = () => {
 export const useSendFriendRequestMutation = () => {
     const queryClient = useQueryClient();
 
-    // Giả định mutationFn: sendFriendRequest nhận { toUserId: string, message?: string }
+    // Giả định mutationFn: sendFriendRequest nhận { toUserId: number, message?: string }
     return useMutation<SingleResponse<null>, Error, FriendRequestDTO>({
         mutationFn: sendFriendRequest, 
         onSuccess: () => {
@@ -250,6 +265,7 @@ export const useSendFriendRequestMutation = () => {
             });
         },
         onError: (err) => {
+            console.error('sendFriendRequest error payload:', err);
             Toast.show({
                 type: 'error',
                 text1: 'Gửi lời mời thất bại',

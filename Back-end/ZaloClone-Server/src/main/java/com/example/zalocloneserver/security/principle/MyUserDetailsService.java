@@ -27,6 +27,7 @@ public class MyUserDetailsService implements UserDetailsService
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(username + " not found"));
 
         return MyUserDetails.builder()
+                .id(user.getId()) // Đảm bảo ID được set
                 .user(user)
                 .authorities(mapRoleToGrandAuthorities(Collections.singletonList(Role.USER)))
                 .build();

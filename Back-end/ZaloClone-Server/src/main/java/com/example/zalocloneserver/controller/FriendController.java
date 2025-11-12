@@ -111,8 +111,8 @@ public class FriendController {
     }
 
     @PostMapping("/sendRequest")
-    public ResponseEntity<APIResponse<FriendRequest>> sendRequest(@Valid @RequestBody FriendRequestDTO friendRequestDTO) {
-        FriendRequest friendRequest = friendService.sendFriendRequest(friendRequestDTO);
+    public ResponseEntity<APIResponse<FriendRequest>> sendRequest(@Valid @RequestParam Long friendId) {
+        FriendRequest friendRequest = friendService.sendFriendRequest(friendId);
         return ResponseEntity.ok(APIResponse.success(friendRequest, "FriendRequest created successfully"));
     }
 

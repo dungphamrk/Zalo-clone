@@ -22,9 +22,12 @@ public class UserProfileResponse {
     public static UserProfileResponse fromEntity(UserProfile profile) {
         if (profile == null) return null;
         return UserProfileResponse.builder()
+                .avatarUrl(profile.getAvatarUrl())
                 .displayName(profile.getDisplayName())
                 .birthday(profile.getBirthday())
+                .gender(profile.getGender())
                 .presence(profile.getPresence())
+                .lastActive(profile.getLastActive())
                 .build();
     }
 }

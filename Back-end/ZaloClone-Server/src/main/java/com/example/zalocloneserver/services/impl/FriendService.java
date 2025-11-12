@@ -14,8 +14,10 @@ import com.example.zalocloneserver.model.entity.UserProfile;
 import com.example.zalocloneserver.repository.IFriendRepository;
 import com.example.zalocloneserver.repository.IFriendRequestRepository;
 import com.example.zalocloneserver.repository.IUserProfileRepository;
+import com.example.zalocloneserver.model.constants.NotificationType;
 import com.example.zalocloneserver.repository.IUserRepository;
 import com.example.zalocloneserver.services.IFriendService;
+import com.example.zalocloneserver.services.INotificationService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -43,6 +45,9 @@ public class FriendService implements IFriendService {
 
     @Autowired
     private IUserProfileRepository userProfileRepository;
+
+    @Autowired
+    private INotificationService notificationService;
     // --- Phương thức tiện ích để lấy User hiện tại ---
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -56,9 +61,9 @@ public class FriendService implements IFriendService {
     // =========================================================
 
     @Override
-    public FriendRequest sendFriendRequest(FriendRequestDTO friendRequest) {
+    public FriendRequest sendFriendRequest(Long friendRequest) {
         User currentUser = getCurrentUser();
-        User toUser = userRepository.findById(friendRequest.getToUserId())
+        User toUser = userRepository.findById(friendRequest)
                 .orElseThrow(() -> new RuntimeException("ToUser not found!"));
 
         // Kiểm tra xem đã gửi yêu cầu hoặc đã là bạn bè chưa (Logic bổ sung)
@@ -68,11 +73,23 @@ public class FriendService implements IFriendService {
         }
 
         FriendRequest friendRequestEntity = new FriendRequest();
-        friendRequestEntity.setMessage(friendRequest.getMessage());
         friendRequestEntity.setCreatedAt(LocalDateTime.now());
         friendRequestEntity.setFromUser(currentUser);
         friendRequestEntity.setToUser(toUser);
-        return friendRequestRepository.save(friendRequestEntity);
+        FriendRequest savedRequest = friendRequestRepository.save(friendRequestEntity);
+
+        // Tạo thông báo cho người nhận
+        String message = (currentUser.getProfile() != null ? currentUser.getProfile().getDisplayName() : currentUser.getUsername()) 
+                         + " đã gửi cho bạn một lời mời kết bạn.";
+        notificationService.createAndSendNotification(
+                toUser, 
+                currentUser, 
+                NotificationType.FRIEND_REQUEST_RECEIVED, 
+                savedRequest.getId().toString(), 
+                message
+        );
+
+        return savedRequest;
     }
 
     @Override
@@ -105,9 +122,26 @@ public class FriendService implements IFriendService {
             relationBtoA.setFriend(userA);
             friendRepository.save(relationBtoA);
 
+            String displayName = userA.getProfile() != null ? userA.getProfile().getDisplayName() : userA.getUsername();
+            notificationService.createAndSendNotification(
+                    userB,
+                    userA,
+                    NotificationType.FRIEND_REQUEST_ACCEPTED,
+                    userA.getId().toString(),
+                    displayName + " đã chấp nhận lời mời kết bạn của bạn."
+            );
+
+            // 3. Tạo hoặc lấy cuộc hội thoại riêng tư giữa hai người
             return relationAtoB;
         } else {
-            // Logic từ chối (ví dụ: thêm notification)
+            String displayName = userA.getProfile() != null ? userA.getProfile().getDisplayName() : userA.getUsername();
+            notificationService.createAndSendNotification(
+                    userB,
+                    userA,
+                    NotificationType.SYSTEM,
+                    userA.getId().toString(),
+                    displayName + " đã từ chối lời mời kết bạn của bạn."
+            );
             return null;
         }
     }
@@ -243,19 +277,25 @@ public class FriendService implements IFriendService {
         Long currentUserId = getCurrentUser().getId();
 
         Page<FriendRequest> requestsPage = friendRequestRepository.findByToUserId(currentUserId, pageable);
-        UserProfile profile= new UserProfile();
-        profile=userProfileRepository.findById(currentUserId).orElseThrow(
-                ()-> new RuntimeException("Profile not found")
-        );
-        UserProfile finalProfile = profile;
-        return requestsPage.map(request -> FriendRequestResponse.builder()
-                .id(request.getId())
-                .fromUserId(request.getFromUser().getId())
-                .fromUsername(request.getFromUser().getUsername())
-                .fromAvatar(finalProfile.getAvatarUrl())
-                .message(request.getMessage())
-                .createdAt(request.getCreatedAt())
-                .build());
+        
+        return requestsPage.map(request -> {
+            // Lấy profile của người GỬI request (fromUser)
+            UserProfile fromUserProfile = request.getFromUser().getProfile();
+            String fromAvatar = fromUserProfile != null ? fromUserProfile.getAvatarUrl() : null;
+            String fromDisplayName = fromUserProfile != null && fromUserProfile.getDisplayName() != null 
+                    ? fromUserProfile.getDisplayName() 
+                    : request.getFromUser().getUsername();
+            
+            return FriendRequestResponse.builder()
+                    .id(request.getId())
+                    .fromUserId(request.getFromUser().getId())
+                    .fromUsername(request.getFromUser().getUsername())
+                    .fromDisplayName(fromDisplayName)
+                    .fromAvatar(fromAvatar)
+                    .message(request.getMessage())
+                    .createdAt(request.getCreatedAt())
+                    .build();
+        });
     }
 
     // --- BỔ SUNG: 9. Lời mời ĐÃ GỬI ĐI (Outgoing Requests) ---
@@ -265,18 +305,24 @@ public class FriendService implements IFriendService {
         // Lấy danh sách yêu cầu kết bạn mà người dùng hiện tại đã GỬI
         Page<FriendRequest> requestsPage = friendRequestRepository.findByFromUserId(currentUserId, pageable);
 
-        UserProfile profile= new UserProfile();
-        profile=userProfileRepository.findById(currentUserId).orElseThrow(
-                ()-> new RuntimeException("Profile not found")
-        );
-        UserProfile finalProfile = profile;
-        return requestsPage.map(request -> FriendRequestSentResponse.builder()
-                .id(request.getId())
-                .toUserId(request.getToUser().getId())
-                .toAvatar(finalProfile.getAvatarUrl())
-                .toUsername(request.getToUser().getUsername())
-                .message(request.getMessage())
-                .build());
+        return requestsPage.map(request -> {
+            // Lấy profile của người NHẬN request (toUser)
+            UserProfile toUserProfile = request.getToUser().getProfile();
+            String toAvatar = toUserProfile != null ? toUserProfile.getAvatarUrl() : null;
+            String toDisplayName = toUserProfile != null && toUserProfile.getDisplayName() != null 
+                    ? toUserProfile.getDisplayName() 
+                    : request.getToUser().getUsername();
+            
+            return FriendRequestSentResponse.builder()
+                    .id(request.getId())
+                    .toUserId(request.getToUser().getId())
+                    .toAvatar(toAvatar)
+                    .toUsername(request.getToUser().getUsername())
+                    .toDisplayName(toDisplayName)
+                    .message(request.getMessage())
+                    .createdAt(request.getCreatedAt())
+                    .build();
+        });
     }
 
     // =========================================================

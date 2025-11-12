@@ -12,3 +12,9 @@ export * from './chat/useChat';
 // Contacts Hooks
 export * from './contacts/useContacts';
 
+// Notification Hooks
+export * from './notifications/useNotifications';
+
+// Wall Hooks
+export * from './wall/useWall';
+

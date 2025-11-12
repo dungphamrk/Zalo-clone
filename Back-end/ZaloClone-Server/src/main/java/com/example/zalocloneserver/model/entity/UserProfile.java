@@ -10,18 +10,21 @@ import java.util.Date;
 
 @Entity
 @Table(name = "user_profiles")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class UserProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @JoinColumn(name = "userId")
-    @OneToOne(cascade = CascadeType.ALL ,  fetch = FetchType.LAZY)
+    @OneToOne(fetch = FetchType.LAZY)
     private User user;
 
     private String avatarUrl;

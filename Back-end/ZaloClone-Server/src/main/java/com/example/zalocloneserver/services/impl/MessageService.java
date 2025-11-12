@@ -8,6 +8,7 @@ import com.example.zalocloneserver.dto.res.message.MessageReactionResponse;
 import com.example.zalocloneserver.dto.res.message.AttachmentResponse;
 import com.example.zalocloneserver.model.constants.MessageType;
 import com.example.zalocloneserver.model.constants.ConversationType;
+import com.example.zalocloneserver.model.constants.NotificationType;
 import com.example.zalocloneserver.model.entity.Attachment;
 import com.example.zalocloneserver.model.entity.Conversation;
 import com.example.zalocloneserver.model.entity.ConversationMember;
@@ -19,6 +20,7 @@ import com.example.zalocloneserver.repository.IMessageRepository;
 import com.example.zalocloneserver.repository.IMessageReactionRepository;
 import com.example.zalocloneserver.repository.IFriendRepository;
 import com.example.zalocloneserver.services.IMessageService;
+import com.example.zalocloneserver.services.INotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +47,7 @@ public class MessageService implements IMessageService {
     private final IAttachmentRepository attachmentRepository;
     private final IFriendRepository friendRepository;
     private final SimpMessageSendingOperations messageTemplate; // Dùng để broadcast
+    private final INotificationService notificationService;
 
     private static final int MAX_ATTACHMENTS = 10;
     private static final long MAX_ATTACHMENT_SIZE = 10L * 1024 * 1024; // 10 MB
@@ -173,6 +176,8 @@ public class MessageService implements IMessageService {
 
         messageTemplate.convertAndSend(topicDestination, messageDTO);
 
+        sendMessageNotifications(conversation, sender, message);
+
         return message;
     }
 
@@ -188,11 +193,21 @@ public class MessageService implements IMessageService {
     MessageResponse convertToDto(Message message) {
         if (message == null) return null;
 
+        // Lấy displayName từ profile, fallback về username nếu không có
+        String senderName = null;
+        if (message.getSender() != null) {
+            if (message.getSender().getProfile() != null && message.getSender().getProfile().getDisplayName() != null) {
+                senderName = message.getSender().getProfile().getDisplayName();
+            } else {
+                senderName = message.getSender().getUsername();
+            }
+        }
+
         MessageResponse.MessageResponseBuilder builder = MessageResponse.builder()
                 .id(message.getId())
                 .conversationId(message.getConversation() != null ? message.getConversation().getId() : null)
                 .senderId(message.getSender() != null ? message.getSender().getId() : null)
-                .senderName(message.getSender() != null ? message.getSender().getUsername() : null)
+                .senderName(senderName)
                 .senderAvatar(message.getSender() != null && message.getSender().getProfile() != null ? message.getSender().getProfile().getAvatarUrl() : null)
                 .type(message.getType())
                 .content(message.getContent())
@@ -204,10 +219,21 @@ public class MessageService implements IMessageService {
         // replyTo
         if (message.getReplyTo() != null) {
             Message rt = message.getReplyTo();
+            
+            // Lấy displayName từ profile, fallback về username nếu không có
+            String replySenderName = null;
+            if (rt.getSender() != null) {
+                if (rt.getSender().getProfile() != null && rt.getSender().getProfile().getDisplayName() != null) {
+                    replySenderName = rt.getSender().getProfile().getDisplayName();
+                } else {
+                    replySenderName = rt.getSender().getUsername();
+                }
+            }
+            
             MessageResponse replyDto = MessageResponse.builder()
                     .id(rt.getId())
                     .senderId(rt.getSender() != null ? rt.getSender().getId() : null)
-                    .senderName(rt.getSender() != null ? rt.getSender().getUsername() : null)
+                    .senderName(replySenderName)
                     .senderAvatar(rt.getSender() != null && rt.getSender().getProfile() != null ? rt.getSender().getProfile().getAvatarUrl() : null)
                     .content(rt.getContent() != null && rt.getContent().length() > 200 ? rt.getContent().substring(0,200) : rt.getContent())
                     .createdAt(rt.getCreatedAt())
@@ -245,6 +271,46 @@ public class MessageService implements IMessageService {
         builder.reactionSummary(summary);
 
         return builder.build();
+    }
+
+    private void sendMessageNotifications(Conversation conversation, User sender, Message message) {
+        if (conversation == null || sender == null || message == null) {
+            return;
+        }
+
+        Set<User> recipients = conversation.getMembers().stream()
+                .map(ConversationMember::getUser)
+                .filter(Objects::nonNull)
+                .filter(user -> user.getId() != null && !Objects.equals(user.getId(), sender.getId()))
+                .collect(Collectors.toSet());
+
+        if (recipients.isEmpty()) {
+            return;
+        }
+
+        String senderName = sender.getProfile() != null && sender.getProfile().getDisplayName() != null
+                ? sender.getProfile().getDisplayName()
+                : sender.getUsername();
+
+        String contentPreview = null;
+        if (message.getType() == MessageType.TEXT && message.getContent() != null && !message.getContent().isBlank()) {
+            contentPreview = message.getContent().length() > 60
+                    ? message.getContent().substring(0, 60) + "..."
+                    : message.getContent();
+        }
+
+        String baseMessage = senderName + " đã gửi một tin nhắn mới";
+        String notificationMessage = contentPreview != null
+                ? baseMessage + ": \"" + contentPreview + "\""
+                : baseMessage + ".";
+
+        recipients.forEach(recipient -> notificationService.createAndSendNotification(
+                recipient,
+                sender,
+                NotificationType.NEW_MESSAGE,
+                message.getId().toString(),
+                notificationMessage
+        ));
     }
 
     @Override

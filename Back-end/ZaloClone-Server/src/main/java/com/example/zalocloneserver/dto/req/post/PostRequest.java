@@ -1,10 +1,11 @@
 package com.example.zalocloneserver.dto.req.post;
 
-import com.example.zalocloneserver.model.constants.PostType;
 import com.example.zalocloneserver.model.constants.Visibility;
 import jakarta.validation.constraints.*;
 import lombok.*;
-import java.util.Set;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -12,27 +13,12 @@ import java.util.Set;
 @Builder
 public class PostRequest {
 
-    @NotNull @Positive
-    private Long userId;
-
-    @NotNull
-    private PostType type;
-
-    @Size(max = 10000, message = "Content too long")
+    @Size(max = 500, message = "Nội dung không được quá 500 từ")
     private String content;
 
-    @Size(max = 2000)
-    private String metadata;
-
-    @NotNull
+    @NotNull(message = "Chế độ hiển thị không được để trống")
     private Visibility visibility;
 
-    private boolean allowComments;
-    private boolean pinned;
-
-    @Size(max = 10)
-    private Set<String> tags;
-
-//    @Size(max = 10)
-//    private Set<AttachmentUploadRequest> attachments;
+    @Size(min = 1, message = "Cần ít nhất một file media")
+    private List<MultipartFile> mediaFiles;
 }

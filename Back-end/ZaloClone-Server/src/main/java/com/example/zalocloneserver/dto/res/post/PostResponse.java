@@ -27,4 +27,7 @@ public class PostResponse{
     private long totalComments;
 
     private boolean reactedByCurrentUser;
+    
+    private com.example.zalocloneserver.model.constants.Visibility visibility;
+    private Boolean isFriend; // null nếu là chính mình, true nếu là bạn bè, false nếu không phải bạn bè
 }
