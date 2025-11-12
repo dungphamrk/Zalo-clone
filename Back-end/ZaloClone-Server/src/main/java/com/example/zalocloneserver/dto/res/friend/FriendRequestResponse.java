@@ -1,7 +1,6 @@
 package com.example.zalocloneserver.dto.res.friend;
 
 import lombok.*;
-
 import java.time.LocalDateTime;
 
 @Data
@@ -9,9 +8,11 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class FriendRequestResponse {
+
     private Long id;
     private Long fromUserId;
-    private String fromUserName;
+    private String fromUsername;
+    private String fromAvatar;
     private String message;
     private LocalDateTime createdAt;
 }

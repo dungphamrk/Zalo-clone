@@ -13,4 +13,6 @@ public class FriendResponse {
     private String friendName;
     private String avatarUrl;
     private LocalDateTime since;
+    private String username;
+    private boolean isFriend;
 }

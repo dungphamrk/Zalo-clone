@@ -33,6 +33,6 @@ public class PostRequest {
     @Size(max = 10)
     private Set<String> tags;
 
-    @Size(max = 10)
-    private Set<AttachmentUploadRequest> attachments;
+//    @Size(max = 10)
+//    private Set<AttachmentUploadRequest> attachments;
 }

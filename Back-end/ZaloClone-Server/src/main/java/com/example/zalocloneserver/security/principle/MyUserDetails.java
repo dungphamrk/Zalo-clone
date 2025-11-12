@@ -15,6 +15,7 @@ import java.util.Collection;
 @Builder
 public class MyUserDetails implements UserDetails
 {
+    private Long id;
     private User user;
     private Collection<? extends GrantedAuthority> authorities;
 

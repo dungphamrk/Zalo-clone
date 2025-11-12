@@ -2,10 +2,12 @@ package com.example.zalocloneserver.controller;
 
 import com.example.zalocloneserver.dto.req.auth.UserRequest;
 import com.example.zalocloneserver.dto.req.user.ChangePasswordRequest;
+import com.example.zalocloneserver.dto.req.user.SearchUserRequest;
 import com.example.zalocloneserver.dto.res.base.APIResponse;
 import com.example.zalocloneserver.dto.res.user.UpdateProfileRequest;
 import com.example.zalocloneserver.dto.res.user.UserProfileResponse;
 import com.example.zalocloneserver.dto.res.user.UserResponse;
+import org.springframework.web.multipart.MultipartFile;
 import com.example.zalocloneserver.exception.UserNotFoundException;
 import com.example.zalocloneserver.model.entity.User;
 import com.example.zalocloneserver.repository.IUserRepository;
@@ -19,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 public class UserController {
 
     @Autowired
@@ -28,29 +30,31 @@ public class UserController {
     @Autowired
     private IUserService userService;
 
-    @Operation(summary = "Tạo tài khoản người dùng", description = "Tạo mới một tài khoản người dùng")
-    @PostMapping
-    public ResponseEntity<APIResponse<User>> createUser(@Valid @RequestBody UserRequest userRequest) {
-        User createdUser = userService.createUser(userRequest);
-        return ResponseEntity.ok(APIResponse.success(createdUser, "Account created successfully"));
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Tìm user theo ID", description = "Trả về thông tin user")
-    public ResponseEntity<APIResponse<UserResponse>> getById(@PathVariable Long id) {
-        UserResponse data = userService.findById(id);
-        return ResponseEntity.ok(APIResponse.success(data, "Get user by id successfully"));
+    @GetMapping("/me")
+    @Operation(summary = "Lấy thông tin profile hiện tại", description = "Lấy thông tin profile của người dùng đang đăng nhập")
+    public ResponseEntity<APIResponse<UserResponse>> getCurrentUserProfile() {
+        UserResponse userProfile = userService.getCurrentUserProfile();
+        return ResponseEntity.ok(APIResponse.success(userProfile, "Get profile successfully"));
     }
 
     @PutMapping("/me")
-    @Operation(summary = "Cập nhật thông tin cá nhân của người dùng hiện tại", description = "Cập nhật thông tin cá nhân của người dùng hiện tại")
     public ResponseEntity<UserProfileResponse> updateMyProfile(
-            @RequestPart("user") UpdateProfileRequest request
+            @Valid @RequestBody UpdateProfileRequest request
     ) {
         return ResponseEntity.ok(userService.updateMyProfile(request));
     }
 
+    @PostMapping("/me/avatar")
+    @Operation(summary = "Upload avatar", description = "Upload avatar cho người dùng hiện tại")
+    public ResponseEntity<APIResponse<UserProfileResponse>> uploadAvatar(
+            @RequestParam("avatar") MultipartFile file
+    ) {
+        UserProfileResponse profile = userService.uploadAvatar(file);
+        return ResponseEntity.ok(APIResponse.success(profile, "Avatar uploaded successfully"));
+    }
+
     @Operation(summary = "Đổi mật khẩu của người dùng hiện tại", description = "Đổi mật khẩu của người dùng hiện tại")
+   @PostMapping("/change-password")
     public ResponseEntity<APIResponse<Void>> changePassword(@RequestBody @Valid ChangePasswordRequest request,
                                                             Principal principal) {
         User currentUser = userRepository.findByUsername(principal.getName())
@@ -58,12 +62,11 @@ public class UserController {
         userService.changePassword(currentUser.getId(), request);
         return ResponseEntity.ok(APIResponse.success(null, "Password changed successfully"));
     }
-    @GetMapping("/search")
-    @Operation(summary = "Tìm kiếm user theo số điện thoại", description = "Trả về thông tin user nếu tồn tại")
-    public ResponseEntity<APIResponse<UserResponse>> findByPhone(
-            @RequestParam("phone") String phone
+    @PostMapping("/search")
+    public ResponseEntity<APIResponse<UserResponse>> findByUsername(
+            @RequestBody SearchUserRequest request
     ) {
-        UserResponse data = userService.findByPhone(phone);
+        UserResponse data = userService.findByUsername(request);
         return ResponseEntity.ok(APIResponse.success(data, "Tìm kiếm người dùng thành công"));
     }
 

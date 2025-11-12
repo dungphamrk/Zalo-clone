@@ -1,8 +1,10 @@
 package com.example.zalocloneserver.dto.req.message;
 
 import com.example.zalocloneserver.model.constants.MessageType;
+import com.example.zalocloneserver.model.entity.Message;
 import jakarta.validation.constraints.*;
 import lombok.*;
+
 import java.util.Set;
 
 @Data
@@ -25,11 +27,20 @@ public class MessageRequest {
     @Size(max = 4000, message = "Content too long")
     private String content;
 
-    private String replyToMessageId;
+    private Long replyToMessageId;
 
     @Size(max = 10, message = "Max 10 attachments")
     private Set<AttachmentUploadRequest> attachments;
 
     @Size(max = 1000, message = "Metadata too long")
     private String metadata;
+
+    public MessageRequest(Message message) {
+        this.conversationId = message.getConversation().getId();
+        this.type = message.getType();
+        this.content = message.getContent();
+        this.metadata = message.getMetadata();
+        this.replyToMessageId = message.getReplyTo() != null ? message.getReplyTo().getId() : null;
+        this.senderId = message.getSender().getId();
+    }
 }

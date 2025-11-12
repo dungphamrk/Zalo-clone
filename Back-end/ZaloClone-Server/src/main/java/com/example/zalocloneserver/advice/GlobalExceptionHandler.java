@@ -3,6 +3,7 @@ package com.example.zalocloneserver.advice;
 import com.example.zalocloneserver.dto.res.base.APIResponse;
 import com.example.zalocloneserver.dto.res.base.ErrorDetail;
 import com.example.zalocloneserver.exception.UnauthorizedException;
+import com.example.zalocloneserver.exception.UserNotFoundException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.apache.coyote.BadRequestException;
@@ -39,7 +40,7 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // ==================== HELPER METHOD ====================
+    // ==================== HELPER METHODS ====================
 
     private <T> ResponseEntity<APIResponse<T>> errorResponse(HttpStatus status, String message, List<ErrorDetail> errors) {
         APIResponse<T> response = APIResponse.error(message, errors, status);
@@ -53,37 +54,34 @@ public class GlobalExceptionHandler {
     // ==================== CUSTOM EXCEPTIONS ====================
 
     @ExceptionHandler(UnauthorizedException.class)
-    public ResponseEntity<APIResponse<Object>> handleUnauthorizedException(UnauthorizedException ex) {
+    public ResponseEntity<APIResponse<Object>> handleUnauthorized(UnauthorizedException ex) {
         return errorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage(),
                 new ErrorDetail("authorization", ex.getMessage()));
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<APIResponse<Object>> handleUserNotFound(UserNotFoundException ex) {
+        return errorResponse(HttpStatus.NOT_FOUND, ex.getMessage(),
+                new ErrorDetail("user", ex.getMessage()));
+    }
+
+    // ==================== SPRING STATUS EXCEPTIONS ====================
+
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<APIResponse<Object>> handleResponseStatusException(ResponseStatusException ex) {
+    public ResponseEntity<APIResponse<Object>> handleResponseStatus(ResponseStatusException ex) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
 
-        String field = switch (status) {
-            case BAD_REQUEST -> "request";
-            case NOT_FOUND -> "resource";
-            case UNAUTHORIZED -> "token";
-            case FORBIDDEN -> "authorization";
-            case CONFLICT -> "database";
-            default -> "error";
-        };
-
-        ErrorDetail errorDetail = new ErrorDetail(field, message);
-        return errorResponse(status, message, errorDetail);
+        return errorResponse(status, message, new ErrorDetail("status", message));
     }
 
-    // ==================== VALIDATION & BINDING ====================
+    // ==================== VALIDATION ====================
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<APIResponse<Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
+    public ResponseEntity<APIResponse<Object>> handleValidation(MethodArgumentNotValidException ex) {
         List<ErrorDetail> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> new ErrorDetail(fieldError.getField(), fieldError.getDefaultMessage()))
                 .collect(Collectors.toList());
-
         return errorResponse(HttpStatus.BAD_REQUEST, "Validation failed", errors);
     }
 
@@ -92,26 +90,25 @@ public class GlobalExceptionHandler {
         List<ErrorDetail> errors = ex.getConstraintViolations().stream()
                 .map(cv -> new ErrorDetail(cv.getPropertyPath().toString(), cv.getMessage()))
                 .collect(Collectors.toList());
-
         return errorResponse(HttpStatus.BAD_REQUEST, "Invalid input data", errors);
     }
 
     @ExceptionHandler(DateTimeParseException.class)
-    public ResponseEntity<APIResponse<Object>> handleDateTimeParseException(DateTimeParseException ex) {
+    public ResponseEntity<APIResponse<Object>> handleDateTimeParse(DateTimeParseException ex) {
         return errorResponse(HttpStatus.BAD_REQUEST, "Invalid date format",
-                new ErrorDetail("date", "Failed to parse date: " + ex.getParsedString()));
+                new ErrorDetail("date", "Cannot parse date: " + ex.getParsedString()));
     }
 
-    // ==================== REQUEST PARAMETERS ====================
+    // ==================== REQUEST PARAMETER ERRORS ====================
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<APIResponse<Object>> handleMissingParameter(MissingServletRequestParameterException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMissingParam(MissingServletRequestParameterException ex) {
         return errorResponse(HttpStatus.BAD_REQUEST, "Missing required parameter",
                 new ErrorDetail(ex.getParameterName(), "This parameter is required"));
     }
 
     @ExceptionHandler(MissingPathVariableException.class)
-    public ResponseEntity<APIResponse<Object>> handleMissingPathVariable(MissingPathVariableException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMissingPath(MissingPathVariableException ex) {
         return errorResponse(HttpStatus.BAD_REQUEST, "Missing path variable",
                 new ErrorDetail(ex.getVariableName(), "Path variable is required"));
     }
@@ -123,57 +120,63 @@ public class GlobalExceptionHandler {
                 new ErrorDetail(ex.getName(), "Expected type: " + type));
     }
 
-    // ==================== HTTP & MEDIA TYPE ====================
+    // ==================== HTTP METHOD & MEDIA ====================
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<APIResponse<Object>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         return errorResponse(HttpStatus.METHOD_NOT_ALLOWED, "HTTP method not supported",
                 new ErrorDetail("method", ex.getMessage()));
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    public ResponseEntity<APIResponse<Object>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
         return errorResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type",
                 new ErrorDetail("content-type", ex.getMessage()));
     }
 
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
-    public ResponseEntity<APIResponse<Object>> handleNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException ex) {
         return errorResponse(HttpStatus.NOT_ACCEPTABLE, "Media type not acceptable",
                 new ErrorDetail("accept", ex.getMessage()));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<APIResponse<Object>> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+    public ResponseEntity<APIResponse<Object>> handleMalformedJson(HttpMessageNotReadableException ex) {
         return errorResponse(HttpStatus.BAD_REQUEST, "Malformed JSON request",
-                new ErrorDetail("body", "Invalid JSON format or syntax error"));
+                new ErrorDetail("body", "Invalid JSON format or syntax"));
     }
 
     @ExceptionHandler(HttpMessageNotWritableException.class)
-    public ResponseEntity<APIResponse<Object>> handleMessageNotWritable(HttpMessageNotWritableException ex) {
+    public ResponseEntity<APIResponse<Object>> handleWriteError(HttpMessageNotWritableException ex) {
         log.error("Failed to write response", ex);
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Response serialization error",
-                new ErrorDetail("response", "Failed to generate response"));
+                new ErrorDetail("response", "Failed to serialize response"));
     }
 
-    // ==================== RESOURCE NOT FOUND ====================
+    // ==================== RESOURCE & DATABASE ====================
 
     @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<APIResponse<Object>> handleNoResourceFound(NoResourceFoundException ex) {
-        return errorResponse(HttpStatus.NOT_FOUND, "Static resource not found",
+    public ResponseEntity<APIResponse<Object>> handleNoResource(NoResourceFoundException ex) {
+        return errorResponse(HttpStatus.NOT_FOUND, "Resource not found",
                 new ErrorDetail("path", ex.getResourcePath()));
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<APIResponse<Object>> handleEntityNotFound(EntityNotFoundException ex) {
         return errorResponse(HttpStatus.NOT_FOUND, "Entity not found",
-                new ErrorDetail("entity", "No record found in database"));
+                new ErrorDetail("entity", ex.getMessage()));
     }
 
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<APIResponse<Object>> handleNoSuchElement(NoSuchElementException ex) {
         return errorResponse(HttpStatus.NOT_FOUND, "Resource not found",
-                new ErrorDetail("id", "No element found with provided identifier"));
+                new ErrorDetail("id", ex.getMessage()));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<APIResponse<Object>> handleDataConflict(DataIntegrityViolationException ex) {
+        return errorResponse(HttpStatus.CONFLICT, "Data conflict",
+                new ErrorDetail("database", "Duplicate entry or constraint violation"));
     }
 
     // ==================== SECURITY ====================
@@ -185,31 +188,23 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler({AuthenticationException.class, BadCredentialsException.class})
-    public ResponseEntity<APIResponse<Object>> handleAuthenticationFailure(Exception ex) {
+    public ResponseEntity<APIResponse<Object>> handleAuthFailure(Exception ex) {
         return errorResponse(HttpStatus.UNAUTHORIZED, "Authentication failed",
-                new ErrorDetail("token", "Invalid or missing credentials"));
+                new ErrorDetail("credentials", ex.getMessage()));
     }
 
-    // ==================== DATABASE ====================
-
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<APIResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        return errorResponse(HttpStatus.CONFLICT, "Data conflict",
-                new ErrorDetail("database", "Duplicate entry or constraint violation"));
-    }
-
-    // ==================== FALLBACK ====================
+    // ==================== BAD REQUEST & GENERIC ====================
 
     @ExceptionHandler(BadRequestException.class)
-    public ResponseEntity<APIResponse<Object>> handleBadRequestException(BadRequestException ex) {
+    public ResponseEntity<APIResponse<Object>> handleBadRequest(BadRequestException ex) {
         return errorResponse(HttpStatus.BAD_REQUEST, "Bad request",
                 new ErrorDetail("request", ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<APIResponse<Object>> handleGenericException(Exception ex) {
+    public ResponseEntity<APIResponse<Object>> handleGeneric(Exception ex) {
         log.error("Unhandled exception occurred", ex);
         return errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred",
-                new ErrorDetail("server", "Please try again later or contact support"));
+                new ErrorDetail("server", ex.getMessage()));
     }
 }

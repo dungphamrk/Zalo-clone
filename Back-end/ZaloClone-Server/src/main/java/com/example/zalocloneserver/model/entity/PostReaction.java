@@ -2,31 +2,30 @@ package com.example.zalocloneserver.model.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "post_reactions",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"postId", "userId", "reaction"}))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Table(
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"post_id", "user_id"})
+        }
+)
 public class PostReaction {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "postId")
+    private LocalDateTime createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "post_id")
     private Post post;
 
-    @ManyToOne
-    @JoinColumn(name = "userId")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
-
-    private String reaction;
-
-    private LocalDateTime reactedAt;
 }

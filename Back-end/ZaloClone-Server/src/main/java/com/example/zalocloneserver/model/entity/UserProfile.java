@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 
 @Entity
 @Table(name = "user_profiles")
@@ -19,13 +20,13 @@ public class UserProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne
     @JoinColumn(name = "userId")
+    @OneToOne(cascade = CascadeType.ALL ,  fetch = FetchType.LAZY)
     private User user;
 
     private String avatarUrl;
-    private String bio;
-    private LocalDateTime birthday;
+    private String displayName;
+    private Date birthday;
 
     @Enumerated(EnumType.STRING)
     private Gender gender;

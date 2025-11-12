@@ -5,7 +5,7 @@ import com.example.zalocloneserver.model.constants.Presence;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.util.Date;
 
 @Data
 @NoArgsConstructor
@@ -16,11 +16,9 @@ public class UpdateProfileRequest {
     @Size(max = 255)
     private String avatarUrl;
 
-    @Size(max = 500)
-    private String bio;
-
     @Past(message = "Birthday must be in the past")
-    private LocalDateTime birthday;
+    private Date birthday;
+    private String displayName;
 
     private Gender gender;
 

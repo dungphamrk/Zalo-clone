@@ -31,4 +31,4 @@ public class MessageStatus {
     private DeliveryStatus status;
 
     private LocalDateTime updatedAt;
-}
+}   

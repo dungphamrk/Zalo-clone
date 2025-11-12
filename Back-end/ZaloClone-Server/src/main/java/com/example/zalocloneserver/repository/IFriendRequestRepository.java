@@ -8,6 +8,9 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.domain.Pageable;
 
+import java.util.List;
+import java.util.Optional;
+
 
 @Repository
 public interface IFriendRequestRepository extends JpaRepository<FriendRequest, Long> {
@@ -26,6 +29,15 @@ public interface IFriendRequestRepository extends JpaRepository<FriendRequest, L
             "ORDER BY fr.createdAt DESC",
             countQuery = "SELECT COUNT(fr) FROM FriendRequest fr WHERE fr.fromUser.id = :userId")
     Page<FriendRequest> findByFromUserId(@Param("userId") Long userId, Pageable pageable);
+
+    boolean existsByFromUserIdAndToUserId(Long fromUserId, Long toUserId);
+
+    @Query("""
+        SELECT fr.toUser.id FROM FriendRequest fr WHERE fr.fromUser.id = :userId
+        UNION
+        SELECT fr.fromUser.id FROM FriendRequest fr WHERE fr.toUser.id = :userId
+       """)
+    List<Long> findPendingIds(@Param("userId") Long userId);
 
 
 }

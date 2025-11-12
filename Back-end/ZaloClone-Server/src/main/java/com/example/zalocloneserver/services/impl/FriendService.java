@@ -1,25 +1,36 @@
 package com.example.zalocloneserver.services.impl;
 
 import com.example.zalocloneserver.dto.req.friend.FriendRequestDTO;
+import com.example.zalocloneserver.dto.res.UserSearchResponse;
 import com.example.zalocloneserver.dto.res.friend.FriendRequestResponse;
+import com.example.zalocloneserver.dto.res.friend.FriendRequestSentResponse;
 import com.example.zalocloneserver.dto.res.friend.FriendResponse;
+import com.example.zalocloneserver.dto.res.user.UserProfileResponse;
+import com.example.zalocloneserver.dto.res.user.UserResponse; // Thêm import này
 import com.example.zalocloneserver.model.entity.Friend;
 import com.example.zalocloneserver.model.entity.FriendRequest;
 import com.example.zalocloneserver.model.entity.User;
+import com.example.zalocloneserver.model.entity.UserProfile;
 import com.example.zalocloneserver.repository.IFriendRepository;
 import com.example.zalocloneserver.repository.IFriendRequestRepository;
+import com.example.zalocloneserver.repository.IUserProfileRepository;
 import com.example.zalocloneserver.repository.IUserRepository;
 import com.example.zalocloneserver.services.IFriendService;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors; // Thêm import này
 
 @Service
 public class FriendService implements IFriendService {
@@ -29,99 +40,284 @@ public class FriendService implements IFriendService {
     private IFriendRequestRepository friendRequestRepository;
     @Autowired
     private IUserRepository userRepository;
-    @Override
-    public FriendRequest sendFriendRequest(FriendRequestDTO friendRequest) {
+
+    @Autowired
+    private IUserProfileRepository userProfileRepository;
+    // --- Phương thức tiện ích để lấy User hiện tại ---
+    private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
-        User currentUser = userRepository.findByUsername(username)
+        return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    // =========================================================
+    // I. FRIEND REQUESTS (Cải tiến respondToFriendRequest)
+    // =========================================================
+
+    @Override
+    public FriendRequest sendFriendRequest(FriendRequestDTO friendRequest) {
+        User currentUser = getCurrentUser();
+        User toUser = userRepository.findById(friendRequest.getToUserId())
+                .orElseThrow(() -> new RuntimeException("ToUser not found!"));
+
+        // Kiểm tra xem đã gửi yêu cầu hoặc đã là bạn bè chưa (Logic bổ sung)
+        if (friendRequestRepository.existsByFromUserIdAndToUserId(currentUser.getId(), toUser.getId()) ||
+                friendRepository.existsByUserIdAndFriendId(currentUser.getId(), toUser.getId())) {
+            throw new RuntimeException("Yêu cầu đã được gửi hoặc đã là bạn bè.");
+        }
+
         FriendRequest friendRequestEntity = new FriendRequest();
         friendRequestEntity.setMessage(friendRequest.getMessage());
         friendRequestEntity.setCreatedAt(LocalDateTime.now());
         friendRequestEntity.setFromUser(currentUser);
-        friendRequestEntity.setToUser(userRepository.findById(friendRequest.getToUserId()).orElseThrow(() -> new RuntimeException("ToUser not found!")));
+        friendRequestEntity.setToUser(toUser);
         return friendRequestRepository.save(friendRequestEntity);
     }
 
     @Override
+    @Transactional // Đảm bảo giao dịch cho việc tạo 2 mối quan hệ
     public Friend respondToFriendRequest(Long requestId, boolean isAccepted) {
-        FriendRequest friendRequest = friendRequestRepository.findById(requestId).orElseThrow(() -> new RuntimeException("Request not found!"));
+        FriendRequest friendRequest = friendRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Request not found!"));
+
+        // Lấy thông tin hai người dùng
+        User userA = friendRequest.getToUser(); // Người chấp nhận/từ chối
+        User userB = friendRequest.getFromUser(); // Người gửi lời mời
+
+        // Xóa yêu cầu sau khi xử lý
         friendRequestRepository.deleteById(requestId);
+
         if (isAccepted) {
-            Friend friend = new Friend();
-            friend.setSince(LocalDateTime.now());
-            friend.setUser(friendRequest.getToUser());
-            friend.setFriend(friendRequest.getFromUser());
-            friendRepository.save(friend);
-            return friend;
+            LocalDateTime now = LocalDateTime.now();
+
+            // 1. Mối quan hệ A -> B
+            Friend relationAtoB = new Friend();
+            relationAtoB.setSince(now);
+            relationAtoB.setUser(userA);
+            relationAtoB.setFriend(userB);
+            friendRepository.save(relationAtoB);
+
+            // 2. Mối quan hệ B -> A (Mối quan hệ hai chiều)
+            Friend relationBtoA = new Friend();
+            relationBtoA.setSince(now);
+            relationBtoA.setUser(userB);
+            relationBtoA.setFriend(userA);
+            friendRepository.save(relationBtoA);
+
+            return relationAtoB;
         } else {
-            // thêm notification từ chối
+            // Logic từ chối (ví dụ: thêm notification)
             return null;
         }
     }
 
+    // =========================================================
+    // II. FRIEND READ OPERATIONS (Cải tiến getFriends)
+    // =========================================================
+
     @Override
+    @Transactional()
     public Page<FriendResponse> getFriends(Pageable pageable) {
+        User currentUser = getCurrentUser();
+
+        Page<Friend> friendPage = friendRepository.findByUserId(currentUser.getId(), pageable);
+
+        // Map Friend -> FriendResponse
+        List<FriendResponse> responses = friendPage.stream().map(f -> {
+            User other;
+            if (f.getUser().getId().equals(currentUser.getId())) {
+                other = f.getFriend();
+            } else {
+                other = f.getUser();
+            }
+            other.setProfile(userProfileRepository.findById(other.getId()).orElse(null));
+
+            String displayName = null;
+            String avatarUrl = null;
+            if (other.getProfile() != null) {
+                displayName = other.getProfile().getDisplayName();
+                avatarUrl = other.getProfile().getAvatarUrl();
+            } else {
+                displayName = other.getUsername(); // fallback
+            }
+
+            return FriendResponse.builder()
+                    .friendId(other.getId())
+                    .friendName(displayName)
+                    .avatarUrl(avatarUrl)
+                    .isFriend(true)
+                    .username(currentUser.getUsername())
+                    .since(f.getSince()) // hoặc f.getSince() tùy tên field
+                    .build();
+        }).collect(Collectors.toList());
+
+        return new PageImpl<>(responses, pageable, friendPage.getTotalElements());
+    }
+
+    // --- BỔ SUNG: 3. Lấy chi tiết Bạn bè ---
+    public FriendResponse getFriendDetail(Long friendId) {
+        // Tìm mối quan hệ Friend (chứ không phải User)
+        Friend friendRelation = friendRepository.findById(friendId)
+                .orElseThrow(() -> new RuntimeException("Mối quan hệ bạn bè không tồn tại."));
+
+        User otherUser = friendRelation.getFriend();
+
+        return FriendResponse.builder()
+                .friendId(otherUser.getId())
+                .isFriend(true)
+                .username(otherUser.getUsername())
+                .friendName(otherUser.getProfile().getDisplayName())
+                .avatarUrl(otherUser.getProfile().getAvatarUrl())
+                .since(friendRelation.getSince()) // Lấy ngày kết bạn
+                .build();
+    }
+
+    public List<UserSearchResponse> searchUsers(String keyword) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         User currentUser = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Lấy danh sách bạn bè dạng Page<User>
-        Page<User> friendsPage = friendRepository.findFriendsByUserId(currentUser.getId(), pageable);
+        // 1️⃣ Lấy danh sách ID của bạn bè và các ID liên quan (Pending)
+        List<Long> friendIds = friendRepository
+                .findFriendsByUserId(currentUser.getId())
+                .stream()
+                .map(f -> f.getFriend().getId())
+                .collect(Collectors.toList());
 
-        return friendsPage.map(friend -> FriendResponse.builder()
-                .friendId(friend.getId())
-                .friendName(friend.getDisplayName())
-                .avatarUrl(friend.getProfile().getAvatarUrl())
-                .since(null) // Nếu bạn có trường “since” trong entity Friend thì map nó ở đây
-                .build());
+        // Thêm ID của chính người dùng vào danh sách loại trừ để không tìm thấy chính mình
+        Set<Long> relatedIds = new HashSet<>(friendIds);
+        relatedIds.add(currentUser.getId());
+
+        List<Long> pendingIds = friendRequestRepository
+                .findPendingIds(currentUser.getId());
+
+        // 2️⃣ Tìm kiếm: Gần đúng cho Bạn bè, Tuyệt đối cho Người lạ
+
+        // 2a. Tìm kiếm GẦN ĐÚNG trong số Bạn bè (IDs nằm trong friendIds)
+        List<User> friendMatches = userRepository
+                .findByIdInAndUsernameContainingIgnoreCase(friendIds, keyword);
+
+        // 2b. Tìm kiếm TUYỆT ĐỐI trong số Người lạ (IDs KHÔNG nằm trong relatedIds)
+        List<User> strangerMatches = userRepository
+                .findByIdNotInAndUsernameIgnoreCase(new ArrayList<>(relatedIds), keyword);
+
+        // 3️⃣ Kết hợp và lọc kết quả trùng lặp (nếu có)
+        Set<User> combinedUsers = new HashSet<>();
+        combinedUsers.addAll(friendMatches);
+        combinedUsers.addAll(strangerMatches);
+
+        List<User> finalMatchedUsers = new ArrayList<>(combinedUsers);
+
+        // 4️⃣ Build danh sách kết quả (Logic này giữ nguyên)
+        return finalMatchedUsers.stream().map(user -> {
+            String status;
+            if (friendIds.contains(user.getId())) {
+                status = "FRIEND";
+            } else if (pendingIds.contains(user.getId())) {
+                status = "PENDING";
+            } else {
+                status = "NEW";
+            }
+
+            return UserSearchResponse.builder()
+                    .id(user.getId())
+                    .username(user.getUsername())
+                    .displayName(user.getProfile() != null ? user.getProfile().getDisplayName() : null)
+                    .avatarUrl(user.getProfile() != null ? user.getProfile().getAvatarUrl() : null)
+                    .gender(user.getProfile() != null ? user.getProfile().getGender() : null)
+                    .presence(user.getProfile() != null ? user.getProfile().getPresence() : null)
+                    .status(status)
+                    .build();
+        }).collect(Collectors.toList());
     }
+
+    // =========================================================
+    // III. FRIEND REQUEST READ OPERATIONS (Bổ sung Outgoing)
+    // =========================================================
 
     @Override
     public Page<FriendRequestResponse> getFriendRequests(Pageable pageable) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String username = authentication.getName();
-        Long currentUserId = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found")).getId();
+        // Lấy danh sách lời mời ĐẾN (Incoming Requests)
+        Long currentUserId = getCurrentUser().getId();
 
-        // Lấy danh sách yêu cầu kết bạn
         Page<FriendRequest> requestsPage = friendRequestRepository.findByToUserId(currentUserId, pageable);
-
-        // Map sang DTO FriendRequestResponse
+        UserProfile profile= new UserProfile();
+        profile=userProfileRepository.findById(currentUserId).orElseThrow(
+                ()-> new RuntimeException("Profile not found")
+        );
+        UserProfile finalProfile = profile;
         return requestsPage.map(request -> FriendRequestResponse.builder()
                 .id(request.getId())
                 .fromUserId(request.getFromUser().getId())
-                .fromUserName(request.getFromUser().getDisplayName())
+                .fromUsername(request.getFromUser().getUsername())
+                .fromAvatar(finalProfile.getAvatarUrl())
                 .message(request.getMessage())
                 .createdAt(request.getCreatedAt())
                 .build());
     }
 
+    // --- BỔ SUNG: 9. Lời mời ĐÃ GỬI ĐI (Outgoing Requests) ---
+    public Page<FriendRequestSentResponse> getOutgoingFriendRequests(Pageable pageable) {
+        Long currentUserId = getCurrentUser().getId();
+
+        // Lấy danh sách yêu cầu kết bạn mà người dùng hiện tại đã GỬI
+        Page<FriendRequest> requestsPage = friendRequestRepository.findByFromUserId(currentUserId, pageable);
+
+        UserProfile profile= new UserProfile();
+        profile=userProfileRepository.findById(currentUserId).orElseThrow(
+                ()-> new RuntimeException("Profile not found")
+        );
+        UserProfile finalProfile = profile;
+        return requestsPage.map(request -> FriendRequestSentResponse.builder()
+                .id(request.getId())
+                .toUserId(request.getToUser().getId())
+                .toAvatar(finalProfile.getAvatarUrl())
+                .toUsername(request.getToUser().getUsername())
+                .message(request.getMessage())
+                .build());
+    }
+
+    // =========================================================
+    // IV. MUTATIONS (Cải tiến unfriend, bổ sung cancelRequest)
+    // =========================================================
+
     @Override
     @Transactional
     public void unfriend(Long friendId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String username = authentication.getName();
-        User currentUser = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User currentUser = getCurrentUser();
 
         if (currentUser.getId().equals(friendId)) {
             throw new RuntimeException("Không thể hủy kết bạn với chính bạn");
         }
 
-        // Kiểm tra user friendId tồn tại
         User other = userRepository.findById(friendId)
                 .orElseThrow(() -> new RuntimeException("User bạn muốn hủy không tồn tại"));
 
-        // Lấy tất cả records giữa 2 user (2 chiều)
+        // Lấy và xóa mối quan hệ hai chiều
         List<Friend> relations = friendRepository.findAllBetweenUsers(currentUser.getId(), friendId);
 
         if (relations == null || relations.isEmpty()) {
             throw new RuntimeException("Hai người không phải là bạn bè");
         }
 
-        // Xóa tất cả records liên quan
         friendRepository.deleteAll(relations);
+    }
+
+    // --- BỔ SUNG: 10. Hủy lời mời đã gửi đi (Cancel Friend Request) ---
+    @Transactional
+    public void cancelFriendRequest(Long requestId) {
+        User currentUser = getCurrentUser();
+
+        FriendRequest request = friendRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Friend request not found!"));
+
+        // Chỉ cho phép người gửi (FromUser) hủy lời mời
+        if (!request.getFromUser().getId().equals(currentUser.getId())) {
+            throw new RuntimeException("Bạn không có quyền hủy lời mời này.");
+        }
+
+        friendRequestRepository.delete(request);
     }
 }

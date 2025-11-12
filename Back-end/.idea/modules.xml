@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/Back-end.iml" filepath="$PROJECT_DIR$/.idea/Back-end.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ZaloClone-Server.main.iml" filepath="$PROJECT_DIR$/.idea/modules/ZaloClone-Server.main.iml" />
     </modules>
   </component>
 </project>

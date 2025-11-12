@@ -30,6 +30,5 @@ public class ConversationMember {
     @Enumerated(EnumType.STRING)
     private MemberRole role;
 
-    private LocalDateTime joinedAt;
     private LocalDateTime muteUntil;
 }

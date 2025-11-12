@@ -1,6 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Image, Platform, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Image, Platform, Modal, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useMessages, useChat } from '@/hooks';
+import Toast from 'react-native-toast-message';
+import * as Animatable from 'react-native-animatable';
+import { useQueryClient } from '@tanstack/react-query';
+import { chatKeys } from '@/hooks/chat/useChat';
 
 type MoreOptionsProps = {
   visible: boolean;
@@ -68,85 +73,188 @@ function CallScreen({ visible, onEnd, type }: CallScreenProps) {
   )
 }
 
-export default function ChatScreen() {
-  const [messages, setMessages] = useState(mockMessages);
-  const [input, setInput] = useState("");
-  const [isMenu, setIsMenu] = useState(false);
-  const [callType, setCallType] = useState<CallType>(undefined);
-  const flatRef = useRef<FlatList<any>>(null);
-  const router = useRouter();
+// export default function ChatScreen() {
+//   const params = useLocalSearchParams();
+//   // chatId can come from route params. Fallback to '1' for demo/local behavior.
+//   const chatId = (params?.chatId as string) || '1';
 
-  const sendMessage = () => {
-    if (input.trim()) {
-      setMessages([...messages, { id: String(Date.now()), text: input, fromMe: true }]);
-      setInput("");
-      setTimeout(() => {
-        flatRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  };
-  return (
-    <View style={styles.container}>
-      {/* Header giống zalo */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.headerButton}>{'<'}</Text>
-        </TouchableOpacity>
-        <Image source={{ uri: 'https://randomuser.me/api/portraits/men/32.jpg' }} style={styles.headerAvatar} />
-        <View style={{ flex: 1}}>
-          <Text style={styles.headerTitle}>Nguyễn Văn A</Text>
-          <Text style={styles.headerStatus}>Đang hoạt động</Text>
-        </View>
-        <TouchableOpacity onPress={() => setCallType('audio')}>
-          <Text style={styles.headerButton}>📞</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setIsMenu(true)}>
-          <Text style={styles.headerButton}>⋯</Text>
-        </TouchableOpacity>
-      </View>
-      {/* Message list */}
-      <FlatList
-        ref={flatRef}
-        data={messages}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={[styles.messageBox, item.fromMe ? styles.messageMe : styles.messageOther] }>
-            {!item.fromMe && <Image source={{ uri: item.avatar }} style={styles.messageAvatar} />}
-            <View style={[styles.bubble, item.fromMe ? styles.bubbleMe : styles.bubbleOther]}>
-              <Text style={item.fromMe ? styles.textMe : styles.textOther}>{item.text}</Text>
-            </View>
-          </View>
-        )}
-        contentContainerStyle={{ padding: 10, paddingBottom: 70 }}
-        onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
-        onLayout={() => flatRef.current?.scrollToEnd({ animated: false })}
-      />
-      {/* Input */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={70} style={styles.inputContainer}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          style={styles.input}
-          placeholder="Nhập tin nhắn..."
-        />
-        <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
-          <Text style={{ color: 'white', fontWeight: 'bold' }}>Gửi</Text>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
-      <MoreOptions
-        visible={isMenu}
-        onClose={() => setIsMenu(false)}
-        onCall={() => { setIsMenu(false); setCallType('audio'); }}
-        onVideo={() => { setIsMenu(false); setCallType('video'); }}
-      />
-      <CallScreen
-        visible={!!callType}
-        type={callType}
-        onEnd={() => setCallType(undefined)}
-      />
-    </View>
-  );
-}
+//   const { data: messagesData, isLoading, isError } = useMessages(chatId);
+//   const { data: chatDetail } = useChat(chatId);
+//   const sendMessageMutation = useSendMessage();
+//   const { enqueueFailedMessage, connected, presenceMap, typingMap } = useSocket();
+//   const queryClient = useQueryClient();
+//   // Local input state only
+//   const [input, setInput] = useState("");
+//   const [isMenu, setIsMenu] = useState(false);
+//   const [callType, setCallType] = useState<CallType>(undefined);
+//   const flatRef = useRef<FlatList<any>>(null);
+//   const router = useRouter();
+
+//   const sendMessage = () => {
+//     if (!input.trim()) return;
+
+//     const payload = { chatId, text: input };
+
+//     sendMessageMutation.mutate(payload, {
+//       onError: () => {
+//         // enqueue for retry if socket available; otherwise still enqueue
+//         enqueueFailedMessage(payload);
+//         Toast.show({ type: 'error', text1: 'Gửi tin nhắn thất bại', text2: 'Tin nhắn sẽ được gửi lại khi có kết nối' });
+//       },
+//       onSuccess: () => {
+//         // optional success toast (we already optimistic update)
+//         Toast.show({ type: 'success', text1: 'Đã gửi' });
+//       },
+//     });
+
+//     setInput("");
+//     // ensure we scroll to end after a tick
+//     setTimeout(() => {
+//       flatRef.current?.scrollToEnd({ animated: true });
+//     }, 120);
+//   };
+
+//   // Smooth scroll to bottom when messages change
+//   useEffect(() => {
+//     // wait for layout to stabilize then scroll
+//     const id = setTimeout(() => {
+//       try {
+//         flatRef.current?.scrollToEnd({ animated: true });
+//       } catch {}
+//     }, 60);
+//     return () => clearTimeout(id);
+//   }, [messagesData]);
+
+//   // Realtime handled by SocketProvider which updates the react-query cache
+//   return (
+//     <View style={styles.container}>
+//       {/* Header giống zalo */}
+//       <View style={styles.header}>
+//         <TouchableOpacity onPress={() => router.back()}>
+//           <Text style={styles.headerButton}>{'<'}</Text>
+//         </TouchableOpacity>
+//         <Image source={{ uri: chatDetail?.items.name || 'https://randomuser.me/api/portraits/men/32.jpg' }} style={styles.headerAvatar} />
+//         <View style={{ flex: 1}}>
+//           <Text style={styles.headerTitle}>{chatDetail?.items.name || 'Người lạ'}</Text>
+//           {
+//             (() => {
+//               const typingUsers = typingMap?.[chatId] || [];
+//               const isTyping = typingUsers.length > 0;
+//               const online = typeof presenceMap?.[chatId] === 'boolean' ? presenceMap[chatId] : connected;
+//               return (
+//                 <Text style={styles.headerStatus}>{isTyping ? 'Đang nhập...' : (online ? 'Đang hoạt động' : 'Offline')}</Text>
+//               );
+//             })()
+//           }
+//         </View>
+//         <TouchableOpacity onPress={() => setCallType('audio')}>
+//           <Text style={styles.headerButton}>📞</Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity onPress={() => setIsMenu(true)}>
+//           <Text style={styles.headerButton}>⋯</Text>
+//         </TouchableOpacity>
+//       </View>
+//       {/* Message list */}
+//       {isLoading ? (
+//         <View style={styles.loadingContainer}>
+//           <ActivityIndicator size="large" color="#028fe7" />
+//         </View>
+//       ) : isError ? (
+//         <View style={styles.loadingContainer}>
+//           <Text style={{ marginBottom: 12 }}>Không tải được tin nhắn.</Text>
+//           <TouchableOpacity onPress={() => queryClient.invalidateQueries({ queryKey: chatKeys.messages(chatId) })} style={styles.retryBtn}>
+//             <Text style={{ color: '#fff' }}>Thử lại</Text>
+//           </TouchableOpacity>
+//         </View>
+//       ) : (
+//         <FlatList
+//           ref={flatRef}
+//           data={messagesData || mockMessages}
+//           keyExtractor={item => item.id}
+//           renderItem={({ item, index }) => {
+//             const arr = (messagesData || mockMessages) as any[];
+//             const lastId = arr.length ? arr[arr.length - 1].id : undefined;
+//             const animate = item.id === lastId;
+//             return (
+//               <Animatable.View
+//                 animation={animate ? 'fadeInUp' : undefined}
+//                 duration={160}
+//                 useNativeDriver
+//                 style={[styles.messageWrapper]}
+//               >
+//                 <View style={[styles.messageBox, item.fromMe ? styles.messageMe : styles.messageOther] }>
+//                   {!item.fromMe && <Image source={{ uri: item.avatar }} style={styles.messageAvatar} />}
+//                   <View style={[styles.bubble, item.fromMe ? styles.bubbleMe : styles.bubbleOther]}>
+//                       <Text style={item.fromMe ? styles.textMe : styles.textOther}>{item.text}</Text>
+//                       {item.queued ? (
+//                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+//                           <Text style={styles.queuedText}>⏳ Đang chờ gửi</Text>
+//                           <TouchableOpacity onPress={async () => {
+//                             try {
+//                               await removeQueueItem(item.id);
+//                               // remove from cache
+//                               queryClient.setQueryData(chatKeys.messages(item.chatId), (old: any[] = []) => old.filter(m => m.id !== item.id));
+//                               Toast.show({ type: 'info', text1: 'Đã huỷ tin nhắn'});
+//                             } catch {
+//                               Toast.show({ type: 'error', text1: 'Không thể huỷ'});
+//                             }
+//                           }} style={{ marginLeft: 10 }}>
+//                             <Text style={{ color: '#ff6b6b', fontWeight: '700' }}>Huỷ</Text>
+//                           </TouchableOpacity>
+//                         </View>
+//                       ) : null}
+//                     </View>
+//                 </View>
+//               </Animatable.View>
+//             );
+//           }}
+//           contentContainerStyle={{ padding: 10, paddingBottom: 120 }}
+//           onContentSizeChange={() => {
+//             // small delay then smooth scroll
+//             setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 40);
+//           }}
+//           onLayout={() => setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 20)}
+//         />
+//       )}
+//       {/* Input - placed in normal flow so keyboard pushes content */}
+//       <KeyboardAvoidingView
+//         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+//         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 70}
+//       >
+//         <View style={styles.inputContainerInline}>
+//           <TextInput
+//             value={input}
+//             onChangeText={setInput}
+//             style={styles.input}
+//             placeholder="Nhập tin nhắn..."
+//           />
+//           <TouchableOpacity
+//             onPress={sendMessage}
+//             style={[styles.sendButton, (sendMessageMutation.isPending || !input.trim()) && { opacity: 0.55 }]}
+//             disabled={sendMessageMutation.isPending || !input.trim()}
+//           >
+//             {sendMessageMutation.isPending ? (
+//               <ActivityIndicator color="#fff" />
+//             ) : (
+//               <Text style={{ color: 'white', fontWeight: 'bold' }}>Gửi</Text>
+//             )}
+//           </TouchableOpacity>
+//         </View>
+//       </KeyboardAvoidingView>
+//       <MoreOptions
+//         visible={isMenu}
+//         onClose={() => setIsMenu(false)}
+//         onCall={() => { setIsMenu(false); setCallType('audio'); }}
+//         onVideo={() => { setIsMenu(false); setCallType('video'); }}
+//       />
+//       <CallScreen
+//         visible={!!callType}
+//         type={callType}
+//         onEnd={() => setCallType(undefined)}
+//       />
+//     </View>
+//   );
+// }
 
 const styles = StyleSheet.create({
   container: {
@@ -221,6 +329,7 @@ const styles = StyleSheet.create({
     color: '#222',
     fontSize: 15,
   },
+  queuedText: { fontSize: 11, color: '#6b6b6b', marginTop: 6 },
   messageAvatar: {
     width: 28,
     height: 28,
@@ -256,6 +365,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  inputContainerInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  messageWrapper: {
+    marginVertical: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  retryBtn: {
+    backgroundColor: '#028fe7',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   menuBox: {
     position: 'absolute',

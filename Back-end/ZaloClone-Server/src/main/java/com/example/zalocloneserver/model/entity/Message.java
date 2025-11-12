@@ -1,5 +1,6 @@
 package com.example.zalocloneserver.model.entity;
 
+import com.example.zalocloneserver.dto.res.message.MessageResponse;
 import com.example.zalocloneserver.model.constants.MessageType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -40,4 +41,9 @@ public class Message {
     @OneToMany(mappedBy = "message" )
     @Builder.Default
     private Set<Attachment> attachments = new HashSet<>();
+
+    // Reply-to relationship: a message may reply to another message
+    @ManyToOne
+    @JoinColumn(name = "replyToId")
+    private Message replyTo;
 }

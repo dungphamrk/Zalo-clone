@@ -10,9 +10,8 @@ import lombok.*;
 @Builder
 public class UserResponse {
     private Long id;
-    private String phone;
+    private String username;
     private String email;
-    private String displayName;
     private UserStatus status;
     private UserProfileResponse profile;
 }

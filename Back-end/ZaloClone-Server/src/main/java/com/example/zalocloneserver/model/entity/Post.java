@@ -1,45 +1,39 @@
 package com.example.zalocloneserver.model.entity;
 
-import com.example.zalocloneserver.model.constants.PostType;
 import com.example.zalocloneserver.model.constants.Visibility;
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
-@Table(name = "posts")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class Post {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "userId")
-    private User user;
-
-    @Enumerated(EnumType.STRING)
-    private PostType type;
-
+    @Column(length = 500)
     private String content;
-    private String metadata;
 
     @Enumerated(EnumType.STRING)
     private Visibility visibility;
 
-    private boolean allowComments;
-    private boolean pinned;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
 
-    @Builder.Default
-    private Long commentCount = 0L;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    @Builder.Default
-    private Long reactionCount = 0L;
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostReaction> reactions;
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Comment> comments;
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostMedia> media;
 }

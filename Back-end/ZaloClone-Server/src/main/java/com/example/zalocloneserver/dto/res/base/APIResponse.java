@@ -1,16 +1,17 @@
 package com.example.zalocloneserver.dto.res.base;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import io.netty.handler.codec.http.HttpResponse;
+import lombok.*;
 import org.springframework.http.HttpStatus;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-@Data
+@Getter
+@Setter
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class APIResponse<T> {
@@ -62,4 +63,5 @@ public class APIResponse<T> {
     public static <T> APIResponse<T> error(String message, HttpStatus status) {
         return error(message, Collections.emptyList(), status);
     }
+
 }

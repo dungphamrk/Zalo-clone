@@ -34,7 +34,7 @@ public class MyUserDetailsService implements UserDetailsService
 
     private Collection<? extends GrantedAuthority> mapRoleToGrandAuthorities(List<Role> roles) {
         return roles.stream()
-                .map(role -> new SimpleGrantedAuthority(Role.USER.name()))
+                .map(role -> new SimpleGrantedAuthority("ROLE_"+Role.USER.name()))
                 .toList();
     }
 }

@@ -18,12 +18,9 @@ public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    private String phone;
     private String email;
     private String username;
     private String password;
-    private String displayName;
 
     @Enumerated(EnumType.STRING)
     private Role role;
@@ -34,6 +31,6 @@ public class User {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    @OneToOne(mappedBy = "user" , orphanRemoval = true)
+    @OneToOne(cascade = CascadeType.ALL ,  fetch = FetchType.LAZY)
     private UserProfile profile;
 }

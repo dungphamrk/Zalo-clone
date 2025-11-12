@@ -30,4 +30,5 @@ public class MessageResponse {
     private Set<AttachmentResponse> attachments;
     private Set<MessageReactionResponse> reactions;
     private Set<MessageStatusResponse> statuses; // đã xem, đã gửi...
+    private ReactionSummary reactionSummary;
 }
