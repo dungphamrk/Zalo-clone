@@ -13,4 +13,5 @@ public interface ICommentService{
     APIResponse<CommentResponse> createReply(Long commentId, com.example.zalocloneserver.dto.req.ReplyRequest replyRequest);
     APIResponse<Void> deleteComment(Long commentId);
     APIResponse<Void> toggleCommentReaction(Long commentId);
+
 }
